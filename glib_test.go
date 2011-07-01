@@ -2,6 +2,7 @@ package glib
 
 import (
 	"testing"
+	"fmt"
 )
 
 func TestValue(t *testing.T) {
@@ -23,7 +24,21 @@ func TestValue(t *testing.T) {
 	}
 }
 
-func TestSignal(t *testing.T) {
-	s := NewSignal("bla", TYPE_NONE, TYPE_GO_INT)
+func TestObject(t *testing.T) {
+	o := NewObject(TYPE_OBJECT, nil)
+
+	s := NewSignal("bla", TYPE_NONE, TYPE_POINTER, TYPE_GO_INT)
 	t.Logf("Signal: %s", s)
+
+	o.Connect(s, (*A).handler)
+
+	a := A("babababab")
+	o.Emit(s, &a, 123)
 }
+
+type A string
+
+func (a *A) handler(i int) {
+	fmt.Printf("handler: %d", i)
+}
+

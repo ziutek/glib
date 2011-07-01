@@ -10,7 +10,7 @@ import "C"
 
 import (
 	"strconv"
-	"unsafe"
+	"reflect"
 )
 
 // A numerical value which represents the unique identifier of a registered type
@@ -51,70 +51,141 @@ var (
 
 // Returns the Type of the value in the interface{}.
 func TypeOf(i interface{}) Type {
-	switch i.(type) {
-	case string:
-		return TYPE_STRING
-	case int:
-		return TYPE_GO_INT
-	case uint:
-		return TYPE_GO_UINT
-	case int8:
-		return TYPE_CHAR
-	case uint8:
-		return TYPE_UCHAR
-	case int32:
-		return TYPE_GO_INT32
-	case uint32:
-		return TYPE_GO_UINT32
-	case int64:
-		return TYPE_INT64
-	case uint64:
-		return TYPE_UINT64
-	case bool:
+	switch reflect.TypeOf(i).Kind() {
+	case reflect.Invalid:
+		return TYPE_INVALID
+
+	case reflect.Bool:
 		return TYPE_BOOLEAN
-	case float32:
+
+	case reflect.Int:
+		return TYPE_GO_INT
+
+	case reflect.Int8:
+		return TYPE_CHAR
+
+	case reflect.Int32:
+		return TYPE_GO_INT32
+
+	case reflect.Int64:
+		return TYPE_INT64
+
+	case reflect.Uint:
+		return TYPE_GO_UINT
+
+	case reflect.Uint8:
+		return TYPE_UCHAR
+
+	case reflect.Uint32:
+		return TYPE_GO_UINT32
+
+	case reflect.Uint64:
+		return TYPE_UINT64
+
+	case reflect.Float32:
 		return TYPE_FLOAT
-	case float64:
+
+	case reflect.Float64:
 		return TYPE_DOUBLE
-	case unsafe.Pointer:
+
+	case reflect.Ptr:
+		if v, ok := i.(*Object); ok {
+			return v.Type()
+		}
 		return TYPE_POINTER
-	case *Object:
-		return TYPE_OBJECT
-	case Type:
+
+	case reflect.String:
+		return TYPE_STRING
+
+	case reflect.UnsafePointer:
+		return TYPE_POINTER
+	}
+	if _, ok := i.(Type); ok {
 		return TYPE_GTYPE
 	}
-	return TYPE_INVALID
+	panic("Can't map Go type to Glib type")
 }
 
 func (t Type) String() string {
 	return C.GoString((*C.char)(C.g_type_name(C.GType(t))))
 }
 
+func (t Type) Match(rt reflect.Type) bool {
+	k := rt.Kind()
+	switch t {
+	case TYPE_INVALID:
+		return k == reflect.Invalid
+
+	case TYPE_STRING:
+		return k == reflect.String
+
+	case TYPE_GO_INT:
+		return k == reflect.Int
+
+	case TYPE_GO_UINT:
+		return k == reflect.Uint
+
+	case TYPE_CHAR:
+		return k == reflect.Int8
+
+	case TYPE_UCHAR:
+		return k == reflect.Uint8
+
+	case TYPE_GO_INT32:
+		return k == reflect.Int32
+
+	case TYPE_GO_UINT32:
+		return k == reflect.Uint32
+
+	case TYPE_INT64:
+		return k == reflect.Int64
+
+	case TYPE_UINT64:
+		return k == reflect.Uint64
+
+	case TYPE_BOOLEAN:
+		return k == reflect.Bool
+
+	case TYPE_FLOAT:
+		return k == reflect.Float32
+
+	case TYPE_DOUBLE:
+		return k == reflect.Float64
+
+	case TYPE_POINTER:
+		return k == reflect.Ptr || k == reflect.UnsafePointer
+
+	case TYPE_OBJECT:
+		return k == reflect.Ptr
+	}
+	return false
+}
+
 func init() {
 	C.g_thread_init(nil)
 	C.g_type_init()
 	TYPE_GTYPE = Type(C.g_gtype_get_type())
-	switch strconv.IntSize / 8 {
-	case uint(C._GINT_SIZE):
+	int_bytes := strconv.IntSize / 8 
+	if int_bytes == uint(C._GINT_SIZE) {
 		TYPE_GO_INT = TYPE_INT
 		TYPE_GO_UINT = TYPE_UINT
-	case uint(C._GLONG_SIZE):
+	} else if int_bytes == C._GLONG_SIZE {
 		TYPE_GO_INT = TYPE_LONG
 		TYPE_GO_UINT = TYPE_ULONG
-	case 64:
+	} else if int_bytes == 64 {
 		TYPE_GO_INT = TYPE_INT64
 		TYPE_GO_UINT = TYPE_UINT64
-	default:
+	} else {
 		panic("Unexpectd size of 'int'")
 	}
-	switch C.uint(4) {
-	case C._GINT_SIZE:
+	int32_bytes := C.uint(4)
+	if int32_bytes == C._GINT_SIZE {
 		TYPE_GO_INT32 = TYPE_INT
 		TYPE_GO_UINT32 = TYPE_UINT
-	case C._GLONG_SIZE:
+	} else if int32_bytes == C._GLONG_SIZE {
 		TYPE_GO_INT32 = TYPE_LONG
 		TYPE_GO_UINT32 = TYPE_ULONG
-	default:
+	} else {
 		panic("Neither gint nor glong are 32 bit numbers")
 	}
 }
