@@ -25,15 +25,15 @@ func TestValue(t *testing.T) {
 }
 
 func TestObject(t *testing.T) {
-	o := NewObj(TYPE_OBJECT, nil)
+	o := NewObject(TYPE_OBJECT, nil)
 
 	s := NewSignal("bla", TYPE_NONE, TYPE_POINTER, TYPE_GO_INT)
 	t.Logf("Signal: %s", s)
 
-	Connect(o, s, (*A).handler)
+	o.Connect(s, (*A).handler)
 
 	a := A("babababab")
-	Emit(o, s, &a, 123)
+	o.Emit(s, &a, 123)
 }
 
 type A string

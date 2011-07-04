@@ -34,7 +34,7 @@ func NewSignal(name string, ot Type, it ...Type) Signal {
 	if len(it) > 0 {
 		cit = (*C.GType)(&it[0])
 	}
-	return Signal(C.go_signal_new(sig_name, C.GType(ot), C.guint(len(it)), cit))
+	return Signal(C.go_signal_new(sig_name, ot.GType(), C.guint(len(it)), cit))
 }
 
 func (s Signal) String() string {

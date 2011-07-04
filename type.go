@@ -5,11 +5,6 @@ package glib
 
 #define _GINT_SIZE sizeof(gint)
 #define _GLONG_SIZE sizeof(glong)
-
-static inline
-GType _object_type(GObject* o) {
-	return G_OBJECT_TYPE(o);
-}
 */
 import "C"
 
@@ -57,8 +52,8 @@ var (
 // Returns the Type of the value in the interface{}.
 func TypeOf(i interface{}) Type {
 	// Types defined in our package
-	if o, ok := i.(Object); ok {
-		return Type(C._object_type(o.Obj()))
+	if o, ok := i.(ObjectI); ok {
+		return o.Type()
 	}
 	if _, ok := i.(Type); ok {
 		return TYPE_GTYPE
@@ -110,19 +105,19 @@ func TypeOf(i interface{}) Type {
 	panic("Can't map Go type to Glib type")
 }
 
-func (t Type) Typ() C.GType {
+func (t Type) GType() C.GType {
 	return C.GType(t)
 }
 
 func (t Type) String() string {
-	return C.GoString((*C.char)(C.g_type_name(C.GType(t))))
+	return C.GoString((*C.char)(C.g_type_name(t.GType())))
 }
 
-var ot = reflect.TypeOf((*Object)(nil)).Elem()
+var oi = reflect.TypeOf((*ObjectI)(nil)).Elem()
 
 func (t Type) Match(rt reflect.Type) bool {
 	if t == TYPE_OBJECT {
-		return rt == ot
+		return rt.Implements(oi)
 	}
 	k := rt.Kind()
 	switch t {

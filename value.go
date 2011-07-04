@@ -14,7 +14,7 @@ import (
 // An opaque structure used to hold different types of values.
 type Value C.GValue
 
-func (v *Value) Val() *C.GValue {
+func (v *Value) GValue() *C.GValue {
 	return (*C.GValue)(v)
 }
 
@@ -25,82 +25,78 @@ func (v *Value) Type() Type {
 
 // Set value to i
 func (v *Value) Set(i interface{}) {
+	// Types defined in our package
+	if o, ok := i.(ObjectI); ok {
+		C.g_value_set_object(v.GValue(), o.GPointer())
+		return
+	}
+	// Other types
 	r := reflect.ValueOf(i)
 	switch r.Kind() {
 	case reflect.Invalid:
-		C.g_value_reset((*C.GValue)(v))
+		C.g_value_reset(v.GValue())
 
 	case reflect.Bool:
 		if r.Bool() {
-			C.g_value_set_boolean((*C.GValue)(v), C.gboolean(1))
+			C.g_value_set_boolean(v.GValue(), C.gboolean(1))
 		} else {
-			C.g_value_set_boolean((*C.GValue)(v), C.gboolean(0))
+			C.g_value_set_boolean(v.GValue(), C.gboolean(0))
 		}
 
 	case reflect.Int:
 		if TYPE_GO_INT == TYPE_INT {
-			C.g_value_set_int((*C.GValue)(v), C.gint(i.(int)))
+			C.g_value_set_int(v.GValue(), C.gint(i.(int)))
 		} else {
-			C.g_value_set_long((*C.GValue)(v), C.glong(i.(int)))
+			C.g_value_set_long(v.GValue(), C.glong(i.(int)))
 		}
 
 	case reflect.Int8:
-		C.g_value_set_char((*C.GValue)(v), C.gchar(i.(int8)))
+		C.g_value_set_char(v.GValue(), C.gchar(i.(int8)))
 
 	case reflect.Int32:
 		if TYPE_GO_INT32 == TYPE_INT {
-			C.g_value_set_int((*C.GValue)(v), C.gint(i.(int32)))
+			C.g_value_set_int(v.GValue(), C.gint(i.(int32)))
 		} else {
-			C.g_value_set_long((*C.GValue)(v), C.glong(i.(int32)))
+			C.g_value_set_long(v.GValue(), C.glong(i.(int32)))
 		}
 
 	case reflect.Int64:
-		C.g_value_set_int64((*C.GValue)(v), C.gint64(i.(int64)))
+		C.g_value_set_int64(v.GValue(), C.gint64(i.(int64)))
 
 	case reflect.Uint:
 		if TYPE_GO_INT == TYPE_INT {
-			C.g_value_set_uint((*C.GValue)(v), C.guint(i.(uint)))
+			C.g_value_set_uint(v.GValue(), C.guint(i.(uint)))
 		} else {
-			C.g_value_set_ulong((*C.GValue)(v), C.gulong(i.(uint)))
+			C.g_value_set_ulong(v.GValue(), C.gulong(i.(uint)))
 		}
 
 	case reflect.Uint8:
-		C.g_value_set_uchar((*C.GValue)(v), C.guchar(i.(uint8)))
+		C.g_value_set_uchar(v.GValue(), C.guchar(i.(uint8)))
 
 	case reflect.Uint32:
 		if TYPE_GO_INT32 == TYPE_INT {
-			C.g_value_set_uint((*C.GValue)(v), C.guint(i.(uint32)))
+			C.g_value_set_uint(v.GValue(), C.guint(i.(uint32)))
 		} else {
-			C.g_value_set_ulong((*C.GValue)(v), C.gulong(i.(uint32)))
+			C.g_value_set_ulong(v.GValue(), C.gulong(i.(uint32)))
 		}
 
 	case reflect.Uint64:
-		C.g_value_set_uint64((*C.GValue)(v), C.guint64(i.(uint64)))
+		C.g_value_set_uint64(v.GValue(), C.guint64(i.(uint64)))
 
 	case reflect.Float32:
-		C.g_value_set_float((*C.GValue)(v), C.gfloat(i.(float32)))
+		C.g_value_set_float(v.GValue(), C.gfloat(i.(float32)))
 
 	case reflect.Float64:
-		C.g_value_set_double((*C.GValue)(v), C.gdouble(i.(float64)))
+		C.g_value_set_double(v.GValue(), C.gdouble(i.(float64)))
 
 	case reflect.Ptr:
-		if o, ok := i.(*Object); ok {
-			C.g_value_set_object((*C.GValue)(v), C.gpointer(o))
-		} else {
-			C.g_value_set_pointer(
-				(*C.GValue)(v),
-				C.gpointer(unsafe.Pointer(r.Pointer())),
-			)
-		}
+		C.g_value_set_pointer(v.GValue(), C.gpointer(r.Pointer()))
 
 	case reflect.String:
 		C.g_value_set_static_string(
-			(*C.GValue)(v),
+			v.GValue(),
 			(*C.gchar)(C.CString(r.String())),
 		)
-
-	case reflect.UnsafePointer:
-		C.g_value_set_pointer((*C.GValue)(v), C.gpointer(i.(unsafe.Pointer)))
 
 	default:
 		panic("Can't represent Go value in Glib type system.")
@@ -109,12 +105,12 @@ func (v *Value) Set(i interface{}) {
 
 // Initializes value with the default value of type. 
 func (v *Value) Init(t Type) {
-	C.g_value_init((*C.GValue)(v), C.GType(t))
+	C.g_value_init(v.GValue(), t.GType())
 }
 
 // Clears the current value in value and "unsets" the type,
 func (v *Value) Unset() {
-	C.g_value_unset((*C.GValue)(v))
+	C.g_value_unset(v.GValue())
 }
 
 // Returns new initializes value
@@ -137,71 +133,71 @@ func ValueOf(i interface{}) *Value {
 
 // Copies the value into dst.
 func (v *Value) Copy(dst *Value) {
-	C.g_value_copy((*C.GValue)(v), (*C.GValue)(dst))
+	C.g_value_copy(v.GValue(), dst.GValue())
 }
 
 func (v *Value) Get() interface{} {
-	switch Type((*C.GValue)(v).g_type) {
+	switch Type(v.GValue().g_type) {
 	case TYPE_INVALID:
 		return nil
 
 	case TYPE_STRING:
-		return C.GoString((*C.char)(C.g_value_get_string((*C.GValue)(v))))
+		return C.GoString((*C.char)(C.g_value_get_string(v.GValue())))
 
 	case TYPE_GO_INT:
 		if TYPE_GO_INT == TYPE_INT {
-			return int(C.g_value_get_int((*C.GValue)(v)))
+			return int(C.g_value_get_int(v.GValue()))
 		} else {
-			return int(C.g_value_get_long((*C.GValue)(v)))
+			return int(C.g_value_get_long(v.GValue()))
 		}
 
 	case TYPE_GO_UINT:
 		if TYPE_GO_INT == TYPE_INT {
-			return uint(C.g_value_get_uint((*C.GValue)(v)))
+			return uint(C.g_value_get_uint(v.GValue()))
 		} else {
-			return uint(C.g_value_get_ulong((*C.GValue)(v)))
+			return uint(C.g_value_get_ulong(v.GValue()))
 		}
 
 	case TYPE_CHAR:
-		return int8(C.g_value_get_char((*C.GValue)(v)))
+		return int8(C.g_value_get_char(v.GValue()))
 
 	case TYPE_UCHAR:
-		return uint8(C.g_value_get_uchar((*C.GValue)(v)))
+		return uint8(C.g_value_get_uchar(v.GValue()))
 
 	case TYPE_GO_INT32:
 		if TYPE_GO_INT32 == TYPE_INT {
-			return int32(C.g_value_get_int((*C.GValue)(v)))
+			return int32(C.g_value_get_int(v.GValue()))
 		} else {
-			return int32(C.g_value_get_long((*C.GValue)(v)))
+			return int32(C.g_value_get_long(v.GValue()))
 		}
 
 	case TYPE_GO_UINT32:
 		if TYPE_GO_INT32 == TYPE_INT {
-			return uint32(C.g_value_get_uint((*C.GValue)(v)))
+			return uint32(C.g_value_get_uint(v.GValue()))
 		} else {
-			return uint32(C.g_value_get_ulong((*C.GValue)(v)))
+			return uint32(C.g_value_get_ulong(v.GValue()))
 		}
 
 	case TYPE_INT64:
-		return int64(C.g_value_get_int64((*C.GValue)(v)))
+		return int64(C.g_value_get_int64(v.GValue()))
 
 	case TYPE_UINT64:
-		return uint64(C.g_value_get_uint64((*C.GValue)(v)))
+		return uint64(C.g_value_get_uint64(v.GValue()))
 
 	case TYPE_BOOLEAN:
-		return (C.g_value_get_boolean((*C.GValue)(v)) != C.gboolean(0))
+		return (C.g_value_get_boolean(v.GValue()) != C.gboolean(0))
 
 	case TYPE_FLOAT:
-		return float32(C.g_value_get_float((*C.GValue)(v)))
+		return float32(C.g_value_get_float(v.GValue()))
 
 	case TYPE_DOUBLE:
-		return float64(C.g_value_get_double((*C.GValue)(v)))
+		return float64(C.g_value_get_double(v.GValue()))
 
 	case TYPE_POINTER:
-		return unsafe.Pointer(C.g_value_get_pointer((*C.GValue)(v)))
+		return unsafe.Pointer(C.g_value_get_pointer(v.GValue()))
 
 	case TYPE_OBJECT:
-		return (*Object)(C.g_value_get_object((*C.GValue)(v)))
+		return Object(C.g_value_get_object(v.GValue()))
 	}
 	panic("Can't represent GLib value in Go type system.")
 }
