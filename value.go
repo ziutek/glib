@@ -14,6 +14,10 @@ import (
 // An opaque structure used to hold different types of values.
 type Value C.GValue
 
+func (v *Value) Val() *C.GValue {
+	return (*C.GValue)(v)
+}
+
 // Returns v's type.
 func (v *Value) Type() Type {
 	return Type(v.g_type)

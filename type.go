@@ -5,6 +5,11 @@ package glib
 
 #define _GINT_SIZE sizeof(gint)
 #define _GLONG_SIZE sizeof(glong)
+
+static inline
+GType _object_type(GObject* o) {
+	return G_OBJECT_TYPE(o);
+}
 */
 import "C"
 
@@ -51,6 +56,14 @@ var (
 
 // Returns the Type of the value in the interface{}.
 func TypeOf(i interface{}) Type {
+	// Types defined in our package
+	if o, ok := i.(Object); ok {
+		return Type(C._object_type(o.Obj()))
+	}
+	if _, ok := i.(Type); ok {
+		return TYPE_GTYPE
+	}
+	// Other types
 	switch reflect.TypeOf(i).Kind() {
 	case reflect.Invalid:
 		return TYPE_INVALID
@@ -89,28 +102,28 @@ func TypeOf(i interface{}) Type {
 		return TYPE_DOUBLE
 
 	case reflect.Ptr:
-		if v, ok := i.(*Object); ok {
-			return v.Type()
-		}
 		return TYPE_POINTER
 
 	case reflect.String:
 		return TYPE_STRING
-
-	case reflect.UnsafePointer:
-		return TYPE_POINTER
-	}
-	if _, ok := i.(Type); ok {
-		return TYPE_GTYPE
 	}
 	panic("Can't map Go type to Glib type")
+}
+
+func (t Type) Typ() C.GType {
+	return C.GType(t)
 }
 
 func (t Type) String() string {
 	return C.GoString((*C.char)(C.g_type_name(C.GType(t))))
 }
 
+var ot = reflect.TypeOf((*Object)(nil)).Elem()
+
 func (t Type) Match(rt reflect.Type) bool {
+	if t == TYPE_OBJECT {
+		return rt == ot
+	}
 	k := rt.Kind()
 	switch t {
 	case TYPE_INVALID:
@@ -153,9 +166,6 @@ func (t Type) Match(rt reflect.Type) bool {
 		return k == reflect.Float64
 
 	case TYPE_POINTER:
-		return k == reflect.Ptr || k == reflect.UnsafePointer
-
-	case TYPE_OBJECT:
 		return k == reflect.Ptr
 	}
 	return false

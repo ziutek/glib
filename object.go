@@ -4,11 +4,6 @@ package glib
 #include <stdlib.h>
 #include <glib-object.h>
 
-static inline
-GType go_object_type(GObject* o) {
-	return G_OBJECT_TYPE(o);
-}
-
 typedef struct {
 	GClosure cl;
 	gpointer o; 
@@ -34,7 +29,7 @@ void closure_marshal(GClosure* cl, GValue* ret_val, guint n_param,
 }
 
 static inline
-GoClosure* go_closure_new(GObject *o) {
+GoClosure* _closure_new(GObject *o) {
 	GoClosure *cl = (GoClosure*) g_closure_new_simple(sizeof (GoClosure), NULL);
 	cl->o = o;
 	g_closure_set_marshal((GClosure *) cl, closure_marshal);
@@ -42,7 +37,7 @@ GoClosure* go_closure_new(GObject *o) {
 }
 
 static inline
-gulong go_signal_connect(GObject* inst, guint sig, GoClosure* cl) {
+gulong _signal_connect(GObject* inst, guint sig, GoClosure* cl) {
 	return g_signal_connect_closure_by_id(
 		inst,
 		sig,
@@ -53,7 +48,7 @@ gulong go_signal_connect(GObject* inst, guint sig, GoClosure* cl) {
 }
 
 static inline
-void go_signal_emit(const GValue *inst_and_params, guint sig, GValue *ret) {
+void _signal_emit(const GValue *inst_and_params, guint sig, GValue *ret) {
 	return g_signal_emitv(
 		inst_and_params,
 		sig,
@@ -72,61 +67,46 @@ import (
 
 type SigHandlerId C.gulong
 
-type Object C.GObject
 
-type Params map[string]interface{}
+// Binding for any type derived from GObject should implement this interface.
+type Object interface {
+	// Should return self mapped to C.GObject pointer
+	Obj() *C.GObject
 
-// Returns C pointer
-func (o *Object) Ref() *Object {
-	return (*Object)(C.g_object_ref(C.gpointer(o)))
-
-}
-
-func (o *Object) Unref() {
-	C.g_object_unref(C.gpointer(o))
+	// Should return C.gpointer mapped to pointer to self type
+	FromPtr(C.gpointer) Object
 }
 
 // Returns C pointer
-func NewObject(t Type, params Params) *Object {
-	if params == nil || len(params) == 0 {
-		return (*Object)(C.g_object_newv(C.GType(t), 0, nil))
-	}
-	p := make([]C.GParameter, len(params))
-	i := 0
-	for k, v := range params {
-		p[i].name = (*C.gchar)(C.CString(k))
-		defer C.free(unsafe.Pointer(p[i].name))
-		p[i].value = C.GValue(*ValueOf(v))
-		i++
-	}
-	return (*Object)(C.g_object_newv(C.GType(t), C.guint(i), &p[0]))
+func Ref(o Object) Object {
+	return o.FromPtr(C.g_object_ref(C.gpointer(o.Obj())))
 }
 
-func (o *Object) SetProperty(name string, val interface{}) {
+func Unref(o Object) {
+	C.g_object_unref(C.gpointer(o.Obj()))
+}
+
+func SetProperty(o Object, name string, val interface{}) {
 	n := (*C.gchar)(C.CString(name))
 	defer C.free(unsafe.Pointer(n))
-	C.g_object_set_property((*C.GObject)(o), n, (*C.GValue)(ValueOf(val)))
+	C.g_object_set_property(o.Obj(), n, ValueOf(val).Val())
 }
 
-func (o *Object) Type() Type {
-	return Type(C.go_object_type((*C.GObject)(o)))
-}
-
-func (o *Object) Emit(sig Signal, args ...interface{}) interface{} {
+func Emit(o Object, sig Signal, args ...interface{}) interface{} {
 	prms := make([]Value, len(args) + 1)
-	prms[0] = *ValueOf(o)
+	prms[0] = *ValueOf(o.Obj())
 	for i, a := range args {
 		prms[i+1] = *ValueOf(a)
 	}
 	ret := new(Value)
-	C.go_signal_emit((*C.GValue)(&prms[0]), C.guint(sig), (*C.GValue)(ret))
+	C._signal_emit(prms[0].Val(), C.guint(sig), ret.Val())
 	fmt.Println("*** emitl ***")
 	return ret.Get()
 }
 
 var handlers = map[uintptr]map[SigHandlerId]*reflect.Value{}
 
-func (o *Object) Connect(sig Signal, cb_func interface{}) {
+func Connect(o Object, sig Signal, cb_func interface{}) {
 	cb := reflect.ValueOf(cb_func)
 	if cb.Kind() != reflect.Func {
 		panic("cb_func is not a function")
@@ -153,19 +133,15 @@ func (o *Object) Connect(sig Signal, cb_func interface{}) {
 		}
 	}
 	// Setup closure and connect it to signal
-	cl := C.go_closure_new((*C.GObject)(o))
-	cl.h_id = C.go_signal_connect((*C.GObject)(o), C.guint(sig), cl)
-	ptr := o.Uintptr()
+	cl := C._closure_new(o.Obj())
+	cl.h_id = C._signal_connect(o.Obj(), C.guint(sig), cl)
+	ptr := uintptr(unsafe.Pointer(o.Obj()))
 	oh := handlers[ptr]
 	if oh == nil {
 		oh = map[SigHandlerId]*reflect.Value{}
 		handlers[ptr] = oh
 	}
 	oh[SigHandlerId(cl.h_id)] = &cb
-}
-
-func (o *Object) Uintptr() uintptr {
-	return uintptr(unsafe.Pointer(o))
 }
 
 /*typedef struct {
@@ -188,4 +164,37 @@ func marshal(mp unsafe.Pointer) {
 	//cb.Call(in)
 	fmt.Println("cb", cb)
 	fmt.Println("ret_val", p.ret_val)
+}
+
+
+// Binding for generic GObjec
+
+type Params map[string]interface{}
+
+type Obj C.GObject
+
+// Implementation of Object interface
+
+func (o *Obj) Obj() *C.GObject {
+	return (*C.GObject)(o)
+}
+
+func (o *Obj) FromPtr(p C.gpointer) Object {
+	return (*Obj)(o)
+}
+
+// Returns C pointer
+func NewObj(t Type, params Params) *Obj {
+	if params == nil || len(params) == 0 {
+		return (*Obj)(C.g_object_newv(C.GType(t), 0, nil))
+	}
+	p := make([]C.GParameter, len(params))
+	i := 0
+	for k, v := range params {
+		p[i].name = (*C.gchar)(C.CString(k))
+		defer C.free(unsafe.Pointer(p[i].name))
+		p[i].value = C.GValue(*ValueOf(v))
+		i++
+	}
+	return (*Obj)(C.g_object_newv(C.GType(t), C.guint(i), &p[0]))
 }
