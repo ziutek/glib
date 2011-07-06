@@ -11,6 +11,10 @@ import (
 	"fmt"
 )
 
+type ValueGetter interface {
+	Value() *Value
+}
+
 // An opaque structure used to hold different types of values.
 type Value C.GValue
 
@@ -25,9 +29,8 @@ func (v *Value) Type() Type {
 
 // Set value to i
 func (v *Value) Set(i interface{}) {
-	// Types defined in our package
-	if o, ok := i.(ObjectI); ok {
-		C.g_value_set_object(v.GValue(), o.GPointer())
+	if vg, ok := i.(ValueGetter); ok {
+		vg.Value().Copy(v)
 		return
 	}
 	// Other types
@@ -37,11 +40,7 @@ func (v *Value) Set(i interface{}) {
 		C.g_value_reset(v.GValue())
 
 	case reflect.Bool:
-		if r.Bool() {
-			C.g_value_set_boolean(v.GValue(), C.gboolean(1))
-		} else {
-			C.g_value_set_boolean(v.GValue(), C.gboolean(0))
-		}
+		C.g_value_set_boolean(v.GValue(), GBoolean(r.Bool()))
 
 	case reflect.Int:
 		if TYPE_GO_INT == TYPE_INT {
@@ -95,7 +94,7 @@ func (v *Value) Set(i interface{}) {
 	case reflect.String:
 		C.g_value_set_static_string(
 			v.GValue(),
-			(*C.gchar)(C.CString(r.String())),
+			NewString(r.String()).G(),
 		)
 
 	default:
@@ -197,9 +196,14 @@ func (v *Value) Get() interface{} {
 		return unsafe.Pointer(C.g_value_get_pointer(v.GValue()))
 
 	case TYPE_OBJECT:
-		return Object(C.g_value_get_object(v.GValue()))
+		o := new(Object)
+		o.Set(Pointer(C.g_value_get_object(v.GValue())))
+		return o
+
+	case TYPE_GTYPE:
+		return Type(C.g_value_get_gtype(v.GValue()))
 	}
-	panic("Can't represent GLib value in Go type system.")
+	panic("Unknown value type")
 }
 
 func (v *Value) String() string {

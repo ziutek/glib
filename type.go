@@ -1,17 +1,25 @@
 package glib
 
 /*
+#include <stdlib.h>
 #include <glib-object.h>
 
 #define _GINT_SIZE sizeof(gint)
 #define _GLONG_SIZE sizeof(glong)
+
+#cgo pkg-config: glib-2.0 gobject-2.0
 */
 import "C"
 
 import (
 	"strconv"
 	"reflect"
+	"unsafe"
 )
+
+type TypeGetter interface {
+	Type() Type
+}
 
 // A numerical value which represents the unique identifier of a registered type
 type Type C.GType
@@ -49,14 +57,95 @@ var (
 	TYPE_GO_UINT32 Type
 )
 
+
+func (t Type) GType() C.GType {
+	return C.GType(t)
+}
+
+func (t Type) String() string {
+	return C.GoString((*C.char)(C.g_type_name(t.GType())))
+}
+
+func (t Type) QName() Quark {
+	return Quark(C.g_type_qname(t.GType()))
+}
+
+func (t Type) Type() Type {
+	return TYPE_GTYPE
+}
+
+func (t Type) Value() *Value {
+	v := NewValueInit(t.Type())
+	C.g_value_set_gtype(v.GValue(), t.GType())
+	return v
+}
+
+func (t Type) Parent() Type {
+	return Type(C.g_type_parent(t.GType()))
+}
+
+func (t Type) Depth() uint {
+	return uint(C.g_type_depth(t.GType()))
+}
+
+var tg = reflect.TypeOf((*TypeGetter)(nil)).Elem()
+
+func (t Type) Match(rt reflect.Type) bool {
+	if rt.Implements(tg) {
+		r := reflect.Zero(rt).Interface().(TypeGetter).Type()
+		return t.QName() == r.QName()
+	}
+	switch rt.Kind() {
+	case reflect.Invalid:
+		return t == TYPE_INVALID
+
+	case reflect.String:
+		return t == TYPE_STRING
+
+	case reflect.Int:
+		return t == TYPE_GO_INT
+
+	case reflect.Uint:
+		return t == TYPE_GO_UINT
+
+	case reflect.Int8:
+		return t == TYPE_CHAR
+
+	case reflect.Uint8:
+		return t == TYPE_UCHAR
+
+	case reflect.Int32:
+		return t == TYPE_GO_INT32
+
+	case reflect.Uint32:
+		return t == TYPE_GO_UINT32
+
+	case reflect.Int64:
+		return t == TYPE_INT64
+
+	case reflect.Uint64:
+		return t == TYPE_UINT64
+
+	case reflect.Bool:
+		return t == TYPE_BOOLEAN
+
+	case reflect.Float32:
+		return t == TYPE_FLOAT
+
+	case reflect.Float64:
+		return t == TYPE_DOUBLE
+
+	case reflect.Ptr:
+		return t == TYPE_POINTER
+	}
+	return false
+}
+
 // Returns the Type of the value in the interface{}.
 func TypeOf(i interface{}) Type {
 	// Types defined in our package
-	if o, ok := i.(ObjectI); ok {
+	if o, ok := i.(TypeGetter); ok {
 		return o.Type()
-	}
-	if _, ok := i.(Type); ok {
-		return TYPE_GTYPE
 	}
 	// Other types
 	switch reflect.TypeOf(i).Kind() {
@@ -105,67 +194,6 @@ func TypeOf(i interface{}) Type {
 	panic("Can't map Go type to Glib type")
 }
 
-func (t Type) GType() C.GType {
-	return C.GType(t)
-}
-
-func (t Type) String() string {
-	return C.GoString((*C.char)(C.g_type_name(t.GType())))
-}
-
-var oi = reflect.TypeOf((*ObjectI)(nil)).Elem()
-
-func (t Type) Match(rt reflect.Type) bool {
-	if t == TYPE_OBJECT {
-		return rt.Implements(oi)
-	}
-	k := rt.Kind()
-	switch t {
-	case TYPE_INVALID:
-		return k == reflect.Invalid
-
-	case TYPE_STRING:
-		return k == reflect.String
-
-	case TYPE_GO_INT:
-		return k == reflect.Int
-
-	case TYPE_GO_UINT:
-		return k == reflect.Uint
-
-	case TYPE_CHAR:
-		return k == reflect.Int8
-
-	case TYPE_UCHAR:
-		return k == reflect.Uint8
-
-	case TYPE_GO_INT32:
-		return k == reflect.Int32
-
-	case TYPE_GO_UINT32:
-		return k == reflect.Uint32
-
-	case TYPE_INT64:
-		return k == reflect.Int64
-
-	case TYPE_UINT64:
-		return k == reflect.Uint64
-
-	case TYPE_BOOLEAN:
-		return k == reflect.Bool
-
-	case TYPE_FLOAT:
-		return k == reflect.Float32
-
-	case TYPE_DOUBLE:
-		return k == reflect.Float64
-
-	case TYPE_POINTER:
-		return k == reflect.Ptr
-	}
-	return false
-}
-
 func init() {
 	C.g_thread_init(nil)
 	C.g_type_init()
@@ -193,4 +221,45 @@ func init() {
 	} else {
 		panic("Neither gint nor glong are 32 bit numbers")
 	}
+}
+
+type String []C.gchar
+
+func NewString(s string) String {
+	return (*[1<<31-1]C.gchar)(unsafe.Pointer(C.CString(s)))[:len(s)+1]
+}
+
+func (s String) C() *C.char {
+	return (*C.char)(&s[0])
+}
+
+func (s String) G() *C.gchar {
+	return &s[0]
+}
+
+func (s String) Free() {
+	C.free(unsafe.Pointer(s.G()))
+}
+
+type Pointer C.gpointer
+
+func GBoolean(b bool) (r C.gboolean) {
+	if b {
+		r = 1
+	}
+	return
+}
+
+type Quark C.GQuark
+
+func (q Quark) GQuark() C.GQuark {
+	return C.GQuark(q)
+}
+
+func (q Quark) String() string {
+	return C.GoString((*C.char)(C.g_quark_to_string(q.GQuark())))
+}
+
+func QuarkFromString(s string) Quark {
+	return Quark(C.g_quark_from_static_string(NewString(s).G()))
 }

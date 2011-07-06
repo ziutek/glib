@@ -24,16 +24,27 @@ func TestValue(t *testing.T) {
 	}
 }
 
-func TestObject(t *testing.T) {
+func TestSignal(t *testing.T) {
 	o := NewObject(TYPE_OBJECT, nil)
 
-	s := NewSignal("bla", TYPE_NONE, TYPE_POINTER, TYPE_GO_INT)
+	s := NewSignal("sig1", TYPE_NONE, TYPE_POINTER, TYPE_GO_INT)
 	t.Logf("Signal: %s", s)
 
 	o.Connect(s, (*A).handler)
 
-	a := A("babababab")
+	a := A("test_signal")
 	o.Emit(s, &a, 123)
+}
+
+func TestSignalName(t *testing.T) {
+	o := NewObject(TYPE_OBJECT, nil)
+
+	NewSignal("sig2", TYPE_NONE, TYPE_POINTER, TYPE_GO_INT)
+
+	o.ConnectByName("sig2", (*A).handler)
+
+	a := A("test_signal_name")
+	o.EmitByName("sig2", &a, 456)
 }
 
 type A string

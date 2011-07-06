@@ -1,42 +1,39 @@
 package glib
 
 /*
-#include <stdlib.h>
 #include <glib-object.h>
-
-static inline guint go_signal_new(char* name, GType ot, guint ni, GType* it) {
-	return g_signal_newv(
-		name,
-		G_TYPE_OBJECT,
-		G_SIGNAL_RUN_LAST,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		ot,
-		ni,
-		it
-	);
-}
 */
 import "C"
-
-import (
-	"unsafe"
-)
 
 type Signal C.guint
 
 func NewSignal(name string, ot Type, it ...Type) Signal {
-	sig_name := C.CString(name)
-	defer C.free(unsafe.Pointer(sig_name))
+	sig_name := NewString(name)
+	defer sig_name.Free()
 	var cit *C.GType
 	if len(it) > 0 {
 		cit = (*C.GType)(&it[0])
 	}
-	return Signal(C.go_signal_new(sig_name, ot.GType(), C.guint(len(it)), cit))
+	return Signal(C.g_signal_newv(
+		sig_name.G(),
+		TYPE_OBJECT.GType(),
+		C.G_SIGNAL_RUN_LAST,
+		nil,
+		nil,
+		nil,
+		nil,
+		ot.GType(),
+		C.guint(len(it)),
+		cit,
+	))
 }
 
 func (s Signal) String() string {
 	return C.GoString((*C.char)(C.g_signal_name(C.guint(s))))
+}
+
+func SignalLookup(n string, t Type) Signal {
+	s := NewString(n)
+	defer s.Free()
+	return Signal(C.g_signal_lookup(s.G(), t.GType()))
 }
