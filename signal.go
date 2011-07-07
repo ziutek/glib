@@ -2,38 +2,55 @@ package glib
 
 /*
 #include <glib-object.h>
+#include <stdlib.h>
 */
 import "C"
 
-type Signal C.guint
+import (
+	"unsafe"
+)
 
-func NewSignal(name string, ot Type, it ...Type) Signal {
-	sig_name := NewString(name)
-	defer sig_name.Free()
+type SignalFlags C.GSignalFlags
+
+const (
+  SIGNAL_RUN_FIRST = C.G_SIGNAL_RUN_FIRST
+  SIGNAL_RUN_LAST = C.G_SIGNAL_RUN_LAST
+  SIGNAL_RUN_CLEANUP = C.G_SIGNAL_RUN_CLEANUP
+  SIGNAL_NO_RECURSE = C.G_SIGNAL_NO_RECURSE
+  SIGNAL_DETAILED = C.G_SIGNAL_DETAILED
+  SIGNAL_ACTION = C.G_SIGNAL_ACTION
+  SIGNAL_NO_HOOKS = C.G_SIGNAL_NO_HOOKS
+)
+
+type SignalId C.guint
+
+func NewSignal(name string, rt, it Type, pt ...Type) SignalId {
+	sig_name := C.CString(name)
+	defer C.free(unsafe.Pointer(sig_name))
 	var cit *C.GType
-	if len(it) > 0 {
-		cit = (*C.GType)(&it[0])
+	if len(pt) > 0 {
+		cit = (*C.GType)(&pt[0])
 	}
-	return Signal(C.g_signal_newv(
-		sig_name.G(),
-		TYPE_OBJECT.GType(),
-		C.G_SIGNAL_RUN_LAST,
+	return SignalId(C.g_signal_newv(
+		(*C.gchar)(sig_name),
+		it.g(),
+		SIGNAL_RUN_LAST,
 		nil,
 		nil,
 		nil,
 		nil,
-		ot.GType(),
-		C.guint(len(it)),
+		rt.g(),
+		C.guint(len(pt)),
 		cit,
 	))
 }
 
-func (s Signal) String() string {
+func (s SignalId) String() string {
 	return C.GoString((*C.char)(C.g_signal_name(C.guint(s))))
 }
 
-func SignalLookup(n string, t Type) Signal {
-	s := NewString(n)
-	defer s.Free()
-	return Signal(C.g_signal_lookup(s.G(), t.GType()))
+func SignalLookup(n string, t Type) SignalId {
+	s := C.CString(n)
+	defer C.free(unsafe.Pointer(s))
+	return SignalId(C.g_signal_lookup((*C.gchar)(s), t.g()))
 }

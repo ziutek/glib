@@ -14,11 +14,14 @@ import "C"
 import (
 	"strconv"
 	"reflect"
-	"unsafe"
 )
 
 type TypeGetter interface {
 	Type() Type
+}
+
+type PointerSetter interface {
+	Set(p Pointer)
 }
 
 // A numerical value which represents the unique identifier of a registered type
@@ -58,16 +61,16 @@ var (
 )
 
 
-func (t Type) GType() C.GType {
+func (t Type) g() C.GType {
 	return C.GType(t)
 }
 
 func (t Type) String() string {
-	return C.GoString((*C.char)(C.g_type_name(t.GType())))
+	return C.GoString((*C.char)(C.g_type_name(t.g())))
 }
 
 func (t Type) QName() Quark {
-	return Quark(C.g_type_qname(t.GType()))
+	return Quark(C.g_type_qname(t.g()))
 }
 
 func (t Type) Type() Type {
@@ -75,24 +78,43 @@ func (t Type) Type() Type {
 }
 
 func (t Type) Value() *Value {
-	v := NewValueInit(t.Type())
-	C.g_value_set_gtype(v.GValue(), t.GType())
+	v := DefaultValue(t.Type())
+	C.g_value_set_gtype(v.g(), t.g())
 	return v
 }
 
 func (t Type) Parent() Type {
-	return Type(C.g_type_parent(t.GType()))
+	return Type(C.g_type_parent(t.g()))
 }
 
 func (t Type) Depth() uint {
-	return uint(C.g_type_depth(t.GType()))
+	return uint(C.g_type_depth(t.g()))
+}
+
+// Returns the type that is derived directly from root type which is also
+// a base class of t
+func (t Type) NextBase(root Type) Type {
+	return Type(C.g_type_next_base(t.g(), root.g()))
+}
+
+// If is_a type is a derivable type, check whether type is a descendant of
+// is_a type. If is_a type is an interface, check whether type conforms to it.
+func (t Type) IsA(it Type) bool {
+	return C.g_type_is_a(t.g(), it.g()) != 0
 }
 
 var tg = reflect.TypeOf((*TypeGetter)(nil)).Elem()
+var og = reflect.TypeOf((*ObjectGetter)(nil)).Elem()
 
 func (t Type) Match(rt reflect.Type) bool {
+	if rt.Implements(og) {
+		return t.IsA(TYPE_OBJECT)
+	}
 	if rt.Implements(tg) {
-		r := reflect.Zero(rt).Interface().(TypeGetter).Type()
+		if rt.Kind() == reflect.Ptr {
+			rt = rt.Elem()
+		}
+		r := reflect.New(rt).Interface().(TypeGetter).Type()
 		return t.QName() == r.QName()
 	}
 	switch rt.Kind() {
@@ -198,7 +220,7 @@ func init() {
 	C.g_thread_init(nil)
 	C.g_type_init()
 	TYPE_GTYPE = Type(C.g_gtype_get_type())
-	int_bytes := strconv.IntSize / 8 
+	int_bytes := strconv.IntSize / 8
 	if int_bytes == uint(C._GINT_SIZE) {
 		TYPE_GO_INT = TYPE_INT
 		TYPE_GO_UINT = TYPE_UINT
@@ -223,23 +245,19 @@ func init() {
 	}
 }
 
-type String []C.gchar
+/*type String []int8
 
 func NewString(s string) String {
 	return (*[1<<31-1]C.gchar)(unsafe.Pointer(C.CString(s)))[:len(s)+1]
 }
 
-func (s String) C() *C.char {
-	return (*C.char)(&s[0])
-}
-
-func (s String) G() *C.gchar {
-	return &s[0]
+func (s String) Ptr() Pointer {
+	return Pointer(&s[0])
 }
 
 func (s String) Free() {
-	C.free(unsafe.Pointer(s.G()))
-}
+	C.free(unsafe.Pointer(s.Ptr()))
+}*/
 
 type Pointer C.gpointer
 
@@ -261,5 +279,5 @@ func (q Quark) String() string {
 }
 
 func QuarkFromString(s string) Quark {
-	return Quark(C.g_quark_from_static_string(NewString(s).G()))
+	return Quark(C.g_quark_from_static_string((*C.gchar)(C.CString(s))))
 }

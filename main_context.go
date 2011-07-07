@@ -10,7 +10,7 @@ type MainContext struct {
 }
 
 func (k MainContext) GMainContext() *C.GMainContext {
-	return (*C.GMainContext)(k.GPointer())
+	return (*C.GMainContext)(k.Pointer())
 }
 
 func (k MainContext) Iteration(may_block bool) bool {

@@ -11,7 +11,6 @@ GType _object_type(GObject* o) {
 
 typedef struct {
 	GClosure cl;
-	gpointer o; 
 	gulong h_id;
 } GoClosure;
 
@@ -21,23 +20,22 @@ typedef struct {
 	guint n_param;
 	const GValue *params;
 	gpointer ih;
-	gpointer data;
+	gpointer mr_data;
 } MarshalParams;
 
-extern void go_marshal(gpointer mp);  
+extern void _object_marshal(gpointer mp);  
 
 static inline
-void closure_marshal(GClosure* cl, GValue* ret_val, guint n_param,
-		const GValue* params, gpointer ih, gpointer data) {
-	MarshalParams mp = {(GoClosure*) cl, ret_val, n_param, params, ih, data};
-	go_marshal(&mp);	
+void _object_closure_marshal(GClosure* cl, GValue* ret_val, guint n_param,
+		const GValue* params, gpointer ih, gpointer mr_data) {
+	MarshalParams mp = {(GoClosure*) cl, ret_val, n_param, params, ih, mr_data};
+	_object_marshal(&mp);	
 }
 
 static inline
-GoClosure* _closure_new(GObject *o) {
-	GoClosure *cl = (GoClosure*) g_closure_new_simple(sizeof (GoClosure), NULL);
-	cl->o = o;
-	g_closure_set_marshal((GClosure *) cl, closure_marshal);
+GoClosure* _object_closure_new(gpointer p0) {
+	GoClosure *cl = (GoClosure*) g_closure_new_simple(sizeof (GoClosure), p0);
+	g_closure_set_marshal((GClosure*) cl, _object_closure_marshal);
 	return cl;
 }
 
@@ -70,47 +68,55 @@ import (
 	"fmt"
 )
 
+type ObjectGetter interface {
+	Object() *Object
+}
+
 type Object struct {
-	p Pointer
+	p C.gpointer
 }
 
-func (o *Object) GObject() *C.GObject {
-	return (*C.GObject)(unsafe.Pointer(o.p))
+func (o *Object) g() *C.GObject {
+	return (*C.GObject)(o.p)
 }
 
-func (o *Object) GPointer() C.gpointer {
-	return C.gpointer(o.p)
+func (o *Object) Pointer() Pointer {
+	return Pointer(o.p)
 }
 
 func (o *Object) Set(p Pointer) {
-	o.p = p
+	o.p = C.gpointer(p)
 }
 
 func (o *Object) Type() Type {
-	return Type(C._object_type(o.GObject()))
+	return Type(C._object_type(o.g()))
+}
+
+func (o *Object) Object() *Object {
+	return o
 }
 
 func (o *Object) Value() *Value {
-	v := NewValueInit(o.Type())
-	C.g_value_set_object(v.GValue(), o.GPointer())
+	v := DefaultValue(o.Type())
+	C.g_value_set_object(v.g(), o.p)
 	return v
 }
 
 // Returns C pointer
 func (o *Object) Ref() *Object {
 	r := new(Object)
-	r.Set(Pointer(C.g_object_ref(o.GPointer())))
+	r.Set(Pointer(C.g_object_ref(o.p)))
 	return r
 }
 
 func (o *Object) Unref() {
-	C.g_object_unref(o.GPointer())
+	C.g_object_unref(C.gpointer(o.p))
 }
 
 // Returns C pointer
 func (o *Object) RefSink() *Object {
 	r := new(Object)
-	r.Set(Pointer(C.g_object_ref_sink(o.GPointer())))
+	r.Set(Pointer(C.g_object_ref_sink(o.p)))
 	return r
 }
 
@@ -131,116 +137,204 @@ func (o *Object) WeakRef(notify WeakNotify, data interface{}) Object {
 }*/
 
 func (o *Object) SetProperty(name string, val interface{}) {
-	s := NewString(name)
-	defer s.Free()
-	C.g_object_set_property(o.GObject(), s.G(), ValueOf(val).GValue())
+	s := C.CString(name)
+	defer C.free(unsafe.Pointer(s))
+	C.g_object_set_property(o.g(), (*C.gchar)(s),
+		ValueOf(val).g())
 }
 
-func (o *Object) Emit(sig Signal, args ...interface{}) interface{} {
-	prms := make([]Value, len(args) + 1)
+func (o *Object) EmitById(sig SignalId, args ...interface{}) interface{} {
+	var sq C.GSignalQuery
+	C.g_signal_query(C.guint(sig), &sq)
+	if len(args) != int(sq.n_params) {
+		panic(fmt.Sprintf(
+			"*Object.EmitById " +
+			"Number of input parameters #%d doesn't match signal spec #%d",
+			len(args), int(sq.n_params),
+		))
+	}
+	prms := make([]Value, len(args)+1)
 	prms[0] = *ValueOf(o)
 	for i, a := range args {
 		prms[i+1] = *ValueOf(a)
 	}
 	ret := new(Value)
-	C._signal_emit(prms[0].GValue(), C.guint(sig), ret.GValue())
-	fmt.Println("*** emitl ***")
+	C._signal_emit(prms[0].g(), C.guint(sig), ret.g())
+	fmt.Println("*** emit ***")
 	return ret.Get()
 }
 
-func (o *Object) EmitByName(sig_name string, args ...interface{}) interface{} {
-	return o.Emit(SignalLookup(sig_name, o.Type()), args...)
+func (o *Object) Emit(sig_name string, args ...interface{}) interface{} {
+	return o.EmitById(SignalLookup(sig_name, o.Type()), args...)
 }
 
 type SigHandlerId C.gulong
 
-var handlers = map[uintptr]map[SigHandlerId]*reflect.Value{}
+type sigHandler struct {
+	cb, p0 reflect.Value
+}
 
-func (o *Object) Connect(sig Signal, cb_func interface{}) {
+var obj_handlers = make(map[uintptr]map[SigHandlerId]*sigHandler)
+
+func (o *Object) ConnectById(sig SignalId, cb_func, param0 interface{}) {
 	cb := reflect.ValueOf(cb_func)
 	if cb.Kind() != reflect.Func {
-		panic("cb_func is not a function")
+		panic("cb_func isn't a function")
 	}
 	// Check that function parameters and return value match to signal
 	var sq C.GSignalQuery
 	C.g_signal_query(C.guint(sig), &sq)
 	ft := cb.Type()
-	if ft.NumOut() > 1 || ft.NumOut()==1 && Type(sq.return_type) == TYPE_NONE {
+	if ft.NumOut() > 1 || ft.NumOut() == 1 && Type(sq.return_type) == TYPE_NONE {
 		panic("Number of function return values doesn't match signal spec.")
 	}
-	if ft.NumIn() != int(sq.n_params) {
+	poffset := 2
+	if param0 == nil {
+		// Callback function without param0
+		poffset = 1
+	}
+	n_params := int(sq.n_params)
+	if ft.NumIn() != n_params+poffset {
 		panic(fmt.Sprintf(
-			"Number of callback parameters #%d doesn't match signal spec. #%d",
-			ft.NumIn(), sq.n_params,
+			"Number of callback function parameters #%d isn't equal to #%d",
+			ft.NumIn(), n_params+poffset,
 		))
 	}
 	if ft.NumOut() != 0 && !Type(sq.return_type).Match(ft.Out(0)) {
 		panic("Type of function return value doesn't match signal spec.")
 	}
-	pt := (*[1<<16]Type)(unsafe.Pointer(sq.param_types))[:int(sq.n_params)]
-	for i := 0; i < ft.NumIn(); i++ {
-		if !pt[i].Match(ft.In(i)) {
-			panic(fmt.Sprintf(
-				"Callback #%d parameter type: %s doesn't match signal spec: %s",
-				i, ft.In(i), pt[i],
-			))
+	fmt.Println(sq.param_types)
+	if n_params > 0 {
+		pt := (*[1 << 16]Type)(unsafe.Pointer(sq.param_types))[:int(sq.n_params)]
+		fmt.Println("(((onnect")
+		for i := 0; i < n_params; i++ {
+			if !pt[i].Match(ft.In(i + poffset)) {
+				panic(fmt.Sprintf(
+					"Callback #%d param. type %s doesn't match signal spec %s",
+					i+1, ft.In(i), pt[i],
+				))
+			}
 		}
 	}
 	// Setup closure and connect it to signal
-	cl := C._closure_new(o.GObject())
-	cl.h_id = C._signal_connect(o.GObject(), C.guint(sig), cl)
-	oh := handlers[uintptr(o.p)]
-	if oh == nil {
-		oh = map[SigHandlerId]*reflect.Value{}
-		handlers[uintptr(o.p)] = oh
+	var gocl *C.GoClosure
+	p0 := reflect.ValueOf(param0)
+	// Check type of #0 parameter which is set by Connect method
+	switch p0.Kind() {
+	case reflect.Invalid:
+		gocl = C._object_closure_new(nil)
+	case reflect.Ptr:
+		if !p0.Type().AssignableTo(ft.In(0)) {
+			panic(fmt.Sprintf(
+				"Callback #0 parameter type: %s doesn't match signal spec: %s",
+				ft.In(0), p0,
+			))
+		}
+		gocl = C._object_closure_new(C.gpointer(p0.Pointer()))
+	default:
+		panic("Callback parameter #0 isn't a pointer nor nil")
 	}
-	oh[SigHandlerId(cl.h_id)] = &cb
+	gocl.h_id = C._signal_connect(o.g(), C.guint(sig), gocl)
+	oh := obj_handlers[uintptr(o.p)]
+	if oh == nil {
+		oh = make(map[SigHandlerId]*sigHandler)
+		obj_handlers[uintptr(o.p)] = oh
+	}
+	oh[SigHandlerId(gocl.h_id)] = &sigHandler{cb, p0} // p0 for prevent GC
 }
 
-func (o *Object) ConnectByName(sig_name string, cb_func interface{}) {
-	o.Connect(SignalLookup(sig_name, o.Type()), cb_func)
+func (o *Object) Connect(sig_name string, cb_func, param0 interface{}) {
+	o.ConnectById(SignalLookup(sig_name, o.Type()), cb_func, param0)
 }
 
-/*typedef struct {
-	GClosure *cl;
-	GValue *ret_val;
-	guint n_param;
-	const GValue *params;
-	gpointer ih;
-	gpointer data;
-} MarshalParams;*/
+var (
+	ptr_t        = reflect.TypeOf(Pointer(nil))
+	ptr_setter_i = reflect.TypeOf((*PointerSetter)(nil)).Elem()
+)
 
-//export go_marshal
-func marshal(mp unsafe.Pointer) {
-	p := (*C.MarshalParams)(mp)
+func valueFromPointer(p Pointer, t reflect.Type) reflect.Value {
+	v := reflect.New(t).Elem()
+	*(*Pointer)(unsafe.Pointer(v.UnsafeAddr())) = p
+	return v
+}
+
+func convertVal(t reflect.Type, v reflect.Value) reflect.Value {
+	if v.Type() == ptr_t {
+		// v type is Pointer
+		var ret reflect.Value
+		if t.Implements(ptr_setter_i) {
+			// Desired type implements PointerSetter so we are creating
+			// new value with desired type and set it from v
+			if t.Kind() == reflect.Ptr {
+				ret = reflect.New(t.Elem())
+			} else {
+				ret = reflect.Zero(t)
+			}
+			ret.Interface().(PointerSetter).Set(v.Interface().(Pointer))
+		} else if t != ptr_t && t.Kind() == reflect.Ptr {
+			// Input param type is not Pointer but it is some other pointer
+			// so we bypass type checking and converting v to desired type.
+			ret = valueFromPointer(v.Interface().(Pointer), t)
+		}
+		return ret
+	}
+	return v
+}
+
+//export _object_marshal
+func objectMarshal(mp unsafe.Pointer) {
 	fmt.Println("*** marshal ***")
-	cl := (*C.GoClosure)(p.cl)
-	cb := handlers[uintptr(cl.o)][SigHandlerId(cl.h_id)]
+	cmp := (*C.MarshalParams)(mp)
+	gc := (*C.GoClosure)(cmp.cl)
+	n_param := int(cmp.n_param)
+	prms := (*[1 << 16]Value)(unsafe.Pointer(cmp.params))[:n_param]
+	h := obj_handlers[uintptr(prms[0].GetPointer())][SigHandlerId(gc.h_id)]
+	fmt.Println("*** Doszedl ***")
 
-	// TU_SKONCZYLEM
-	//cb.Call(in)
-	fmt.Println("cb", cb)
-	fmt.Println("ret_val", p.ret_val)
+	if h.p0.Kind() != reflect.Invalid {
+		n_param++
+	}
+	rps := make([]reflect.Value, n_param)
+	i := 0
+	if h.p0.Kind() != reflect.Invalid {
+		// Connect called with param0 != nil
+		v := valueFromPointer(Pointer(gc.cl.data), h.p0.Type())
+		rps[i] = v
+		i++
+	}
+	cbt := h.cb.Type()
+	for _, p := range prms {
+		v := reflect.ValueOf(p.Get())
+		rps[i] = convertVal(cbt.In(i), v)
+		i++
+	}
+	fmt.Println("rps:", rps)
+	fmt.Println("************* Call BEGIN ***************")
+	ret := h.cb.Call(rps)
+	fmt.Println("*************  Call END  ***************")
+	fmt.Println("Return", unsafe.Pointer(cmp.ret_val))
+	if cbt.NumOut() == 1 {
+		ret_val := (*Value)(cmp.ret_val)
+		fmt.Println("ret:", ret[0])
+		ret_val.Set(ret[0].Interface())
+	}
 }
 
 type Params map[string]interface{}
 
 // Returns C pointer
 func NewObject(t Type, params Params) *Object {
-	o := new(Object)
 	if params == nil || len(params) == 0 {
-		o.Set(Pointer(C.g_object_newv(t.GType(), 0, nil)))
-		return o
+		return &Object{C.g_object_newv(t.g(), 0, nil)}
 	}
 	p := make([]C.GParameter, len(params))
 	i := 0
 	for k, v := range params {
-		s := NewString(k)
-		defer s.Free()
-		p[i].name = s.G()
-		p[i].value = *ValueOf(v).GValue()
+		s := C.CString(k)
+		defer C.free(unsafe.Pointer(s))
+		p[i].name = (*C.gchar)(s)
+		p[i].value = *ValueOf(v).g()
 		i++
 	}
-	o.Set(Pointer(C.g_object_newv(t.GType(), C.guint(i), &p[0])))
-	return o
+	return &Object{C.g_object_newv(t.g(), C.guint(i), &p[0])}
 }

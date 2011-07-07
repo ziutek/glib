@@ -10,7 +10,7 @@ type MainLoop struct {
 }
 
 func (l MainLoop) GMainLoop() *C.GMainLoop {
-	return (*C.GMainLoop)(l.GPointer())
+	return (*C.GMainLoop)(l.Pointer())
 }
 
 func (l MainLoop) Run() {
