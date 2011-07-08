@@ -12,6 +12,7 @@ GType _object_type(GObject* o) {
 typedef struct {
 	GClosure cl;
 	gulong h_id;
+	gboolean no_inst;
 } GoClosure;
 
 typedef struct {
@@ -33,10 +34,12 @@ void _object_closure_marshal(GClosure* cl, GValue* ret_val, guint n_param,
 }
 
 static inline
-GoClosure* _object_closure_new(gpointer p0) {
-	GoClosure *cl = (GoClosure*) g_closure_new_simple(sizeof (GoClosure), p0);
-	g_closure_set_marshal((GClosure*) cl, _object_closure_marshal);
-	return cl;
+GoClosure* _object_closure_new(gboolean no_inst, gpointer p0) {
+	GClosure *cl = g_closure_new_simple(sizeof (GoClosure), p0);
+	g_closure_set_marshal(cl, _object_closure_marshal);
+	GoClosure *gc = (GoClosure*) cl;
+	gc->no_inst = no_inst;
+	return gc;
 }
 
 static inline
@@ -176,7 +179,7 @@ type sigHandler struct {
 
 var obj_handlers = make(map[uintptr]map[SigHandlerId]*sigHandler)
 
-func (o *Object) ConnectById(sig SignalId, cb_func, param0 interface{}) {
+func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 	cb := reflect.ValueOf(cb_func)
 	if cb.Kind() != reflect.Func {
 		panic("cb_func isn't a function")
@@ -185,13 +188,17 @@ func (o *Object) ConnectById(sig SignalId, cb_func, param0 interface{}) {
 	var sq C.GSignalQuery
 	C.g_signal_query(C.guint(sig), &sq)
 	ft := cb.Type()
-	if ft.NumOut() > 1 || ft.NumOut() == 1 && Type(sq.return_type) == TYPE_NONE {
+	if ft.NumOut() > 1 || ft.NumOut()==1 && Type(sq.return_type) == TYPE_NONE {
 		panic("Number of function return values doesn't match signal spec.")
 	}
 	poffset := 2
 	if param0 == nil {
-		// Callback function without param0
-		poffset = 1
+		// There is no param0
+		poffset--
+	}
+	if noi {
+		// There is no instance on which signal was emited as first parameter
+		poffset--
 	}
 	n_params := int(sq.n_params)
 	if ft.NumIn() != n_params+poffset {
@@ -222,15 +229,15 @@ func (o *Object) ConnectById(sig SignalId, cb_func, param0 interface{}) {
 	// Check type of #0 parameter which is set by Connect method
 	switch p0.Kind() {
 	case reflect.Invalid:
-		gocl = C._object_closure_new(nil)
+		gocl = C._object_closure_new(gBoolean(noi), nil)
 	case reflect.Ptr:
 		if !p0.Type().AssignableTo(ft.In(0)) {
 			panic(fmt.Sprintf(
 				"Callback #0 parameter type: %s doesn't match signal spec: %s",
-				ft.In(0), p0,
+				ft.In(0), p0.Type(),
 			))
 		}
-		gocl = C._object_closure_new(C.gpointer(p0.Pointer()))
+		gocl = C._object_closure_new(gBoolean(noi), C.gpointer(p0.Pointer()))
 	default:
 		panic("Callback parameter #0 isn't a pointer nor nil")
 	}
@@ -243,8 +250,26 @@ func (o *Object) ConnectById(sig SignalId, cb_func, param0 interface{}) {
 	oh[SigHandlerId(gocl.h_id)] = &sigHandler{cb, p0} // p0 for prevent GC
 }
 
+// Connect callback to signal specified by id
+func (o *Object) ConnectSid(sig SignalId, cb_func, param0 interface{}) {
+	o.connect(false, sig, cb_func, param0)
+}
+
+// Connect callback to signal specified by id.
+// Doesn't pass o as first parameter to callback.
+func (o *Object) ConnectSidNoi(sig SignalId, cb_func, param0 interface{}) {
+	o.connect(true, sig, cb_func, param0)
+}
+
+// Connect callback to signal specified by name.
 func (o *Object) Connect(sig_name string, cb_func, param0 interface{}) {
-	o.ConnectById(SignalLookup(sig_name, o.Type()), cb_func, param0)
+	o.ConnectSid(SignalLookup(sig_name, o.Type()), cb_func, param0)
+}
+
+// Connect callback to signal specified by name.
+// Doesn't pass o as first parameter to callback.
+func (o *Object) ConnectNoi(sig_name string, cb_func, param0 interface{}) {
+	o.ConnectSidNoi(SignalLookup(sig_name, o.Type()), cb_func, param0)
 }
 
 var (
@@ -287,8 +312,15 @@ func objectMarshal(mp unsafe.Pointer) {
 	cmp := (*C.MarshalParams)(mp)
 	gc := (*C.GoClosure)(cmp.cl)
 	n_param := int(cmp.n_param)
+	first_param := 0
+	if gc.no_inst != 0 {
+		// Callback without instance on which signal was emited as first param 
+		first_param++
+	}
 	prms := (*[1 << 16]Value)(unsafe.Pointer(cmp.params))[:n_param]
 	h := obj_handlers[uintptr(prms[0].GetPointer())][SigHandlerId(gc.h_id)]
+	prms = prms[first_param:]
+	n_param = len(prms)
 	fmt.Println("*** Doszedl ***")
 
 	if h.p0.Kind() != reflect.Invalid {

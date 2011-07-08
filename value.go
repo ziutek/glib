@@ -38,7 +38,7 @@ func (v *Value) Set(i interface{}) {
 		C.g_value_reset(v.g())
 
 	case reflect.Bool:
-		C.g_value_set_boolean(v.g(), GBoolean(r.Bool()))
+		C.g_value_set_boolean(v.g(), gBoolean(r.Bool()))
 
 	case reflect.Int:
 		if TYPE_GO_INT == TYPE_INT {

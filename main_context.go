@@ -14,7 +14,7 @@ func (k MainContext) GMainContext() *C.GMainContext {
 }
 
 func (k MainContext) Iteration(may_block bool) bool {
-	return C.g_main_context_iteration(k.GMainContext(), GBoolean(may_block))!=0
+	return C.g_main_context_iteration(k.GMainContext(), gBoolean(may_block))!=0
 }
 
 func (k MainContext) Pending() bool {

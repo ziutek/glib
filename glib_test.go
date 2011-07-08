@@ -30,6 +30,10 @@ func (a *A) handler(o *Object, i int) {
 	fmt.Printf("handler: %s, %v, %d\n", a, o, i)
 }
 
+func (a *A) noi_h(i int) {
+	fmt.Printf("noi_h: %s, %d\n", a, i)
+}
+
 func fh(o *Object, i int) {
 	fmt.Printf("fh: %v, %d\n", o, i)
 }
@@ -43,12 +47,13 @@ func TestSignal(t *testing.T) {
 	a := A("test_signal")
 
 	o.ConnectById(s, (*A).handler, &a)
+	o.ConnectNoInstById(s, (*A).noi_h, &a)
 	o.ConnectById(s, fh, nil)
 
 	o.EmitById(s, 123)
 }
 
-func TestSignalName(t *testing.T) {
+/*func TestSignalName(t *testing.T) {
 	o := NewObject(TYPE_OBJECT, nil)
 
 	NewSignal("sig2", TYPE_NONE, TYPE_OBJECT, TYPE_GO_INT)
@@ -59,6 +64,6 @@ func TestSignalName(t *testing.T) {
 	o.Connect("sig2", fh, nil)
 
 	o.Emit("sig2", 456)
-}
+}*/
 
 

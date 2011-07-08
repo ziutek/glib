@@ -261,11 +261,11 @@ func (s String) Free() {
 
 type Pointer C.gpointer
 
-func GBoolean(b bool) (r C.gboolean) {
+func gBoolean(b bool) C.gboolean {
 	if b {
-		r = 1
+		return C.TRUE
 	}
-	return
+	return C.FALSE
 }
 
 type Quark C.GQuark
