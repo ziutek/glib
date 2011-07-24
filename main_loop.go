@@ -33,6 +33,10 @@ func (l MainLoop) GetContext() *MainContext {
 
 func NewMainLoop(ctx *MainContext) *MainLoop {
 	l := new(MainLoop)
-	l.Set(Pointer(C.g_main_loop_new(ctx.GMainContext(), 0)))
+	var c *C.GMainContext
+	if ctx != nil {
+		c = ctx.GMainContext()
+	}
+	l.Set(Pointer(C.g_main_loop_new(c, 0)))
 	return l
 }

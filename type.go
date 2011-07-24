@@ -245,20 +245,6 @@ func init() {
 	}
 }
 
-/*type String []int8
-
-func NewString(s string) String {
-	return (*[1<<31-1]C.gchar)(unsafe.Pointer(C.CString(s)))[:len(s)+1]
-}
-
-func (s String) Ptr() Pointer {
-	return Pointer(&s[0])
-}
-
-func (s String) Free() {
-	C.free(unsafe.Pointer(s.Ptr()))
-}*/
-
 type Pointer C.gpointer
 
 func gBoolean(b bool) C.gboolean {

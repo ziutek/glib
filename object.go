@@ -95,7 +95,7 @@ func (o *Object) Type() Type {
 	return Type(C._object_type(o.g()))
 }
 
-func (o *Object) Object() *Object {
+func (o *Object) AsObject() *Object {
 	return o
 }
 
@@ -123,22 +123,6 @@ func (o *Object) RefSink() *Object {
 	return r
 }
 
-/*type WeakNotify func(data C.gpointer, o *Object)
-
-// Returns C pointer
-func (o *Object) WeakRef(notify WeakNotify, data interface{}) Object {
-	v := reflect.ValueOf(data)
-	var p uintptr
-	if v.Kind() == reflect.Ptr {
-		p = v.Pointer()
-	} else {
-		pv = reflect.New(reflect.TypeOf(data))
-		pv.Elem().Set(v)
-		p = pv.Pointer()
-	}
-	...
-}*/
-
 func (o *Object) SetProperty(name string, val interface{}) {
 	s := C.CString(name)
 	defer C.free(unsafe.Pointer(s))
@@ -146,13 +130,21 @@ func (o *Object) SetProperty(name string, val interface{}) {
 		ValueOf(val).g())
 }
 
+func (o *Object) GetProperty(name string) interface{} {
+	s := C.CString(name)
+	defer C.free(unsafe.Pointer(s))
+	v := new(Value)
+	C.g_object_get_property(o.g(), (*C.gchar)(s), v.g())
+	return v.Get()
+}
+
 func (o *Object) EmitById(sig SignalId, args ...interface{}) interface{} {
 	var sq C.GSignalQuery
 	C.g_signal_query(C.guint(sig), &sq)
 	if len(args) != int(sq.n_params) {
 		panic(fmt.Sprintf(
-			"*Object.EmitById " +
-			"Number of input parameters #%d doesn't match signal spec #%d",
+			"*Object.EmitById "+
+				"Number of input parameters #%d doesn't match signal spec #%d",
 			len(args), int(sq.n_params),
 		))
 	}
@@ -188,7 +180,7 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 	var sq C.GSignalQuery
 	C.g_signal_query(C.guint(sig), &sq)
 	ft := cb.Type()
-	if ft.NumOut() > 1 || ft.NumOut()==1 && Type(sq.return_type) == TYPE_NONE {
+	if ft.NumOut() > 1 || ft.NumOut() == 1 && Type(sq.return_type)== TYPE_NONE {
 		panic("Number of function return values doesn't match signal spec.")
 	}
 	poffset := 2
@@ -212,7 +204,7 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 	}
 	fmt.Println(sq.param_types)
 	if n_params > 0 {
-		pt := (*[1 << 16]Type)(unsafe.Pointer(sq.param_types))[:int(sq.n_params)]
+		pt := (*[1<<16]Type)(unsafe.Pointer(sq.param_types))[:int(sq.n_params)]
 		fmt.Println("(((onnect")
 		for i := 0; i < n_params; i++ {
 			if !pt[i].Match(ft.In(i + poffset)) {
