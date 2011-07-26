@@ -1,3 +1,4 @@
+// Bindings for glib
 package glib
 
 /*
@@ -21,7 +22,7 @@ type TypeGetter interface {
 }
 
 type PointerSetter interface {
-	Set(p Pointer)
+	SetPtr(p Pointer)
 }
 
 // A numerical value which represents the unique identifier of a registered type
@@ -97,20 +98,21 @@ func (t Type) NextBase(root Type) Type {
 	return Type(C.g_type_next_base(t.g(), root.g()))
 }
 
-// If is_a type is a derivable type, check whether type is a descendant of
-// is_a type. If is_a type is an interface, check whether type conforms to it.
+// If t type is a derivable type, check whether type is a descendant of
+// it type. If t type is an glib interface, check whether type conforms
+// to it.
 func (t Type) IsA(it Type) bool {
 	return C.g_type_is_a(t.g(), it.g()) != 0
 }
 
-var tg = reflect.TypeOf((*TypeGetter)(nil)).Elem()
-var og = reflect.TypeOf((*ObjectGetter)(nil)).Elem()
+var type_getter = reflect.TypeOf((*TypeGetter)(nil)).Elem()
+var object_caster = reflect.TypeOf((*ObjectCaster)(nil)).Elem()
 
 func (t Type) Match(rt reflect.Type) bool {
-	if rt.Implements(og) {
+	if rt.Implements(object_caster) {
 		return t.IsA(TYPE_OBJECT)
 	}
-	if rt.Implements(tg) {
+	if rt.Implements(type_getter) {
 		if rt.Kind() == reflect.Ptr {
 			rt = rt.Elem()
 		}
@@ -165,7 +167,7 @@ func (t Type) Match(rt reflect.Type) bool {
 
 // Returns the Type of the value in the interface{}.
 func TypeOf(i interface{}) Type {
-	// Types defined in our package
+	// Types ov values that implements TypeGetter
 	if o, ok := i.(TypeGetter); ok {
 		return o.Type()
 	}

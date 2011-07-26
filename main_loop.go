@@ -10,7 +10,7 @@ type MainLoop struct {
 }
 
 func (l MainLoop) GMainLoop() *C.GMainLoop {
-	return (*C.GMainLoop)(l.Pointer())
+	return (*C.GMainLoop)(l.GetPtr())
 }
 
 func (l MainLoop) Run() {
@@ -27,7 +27,7 @@ func (l MainLoop) IsRunning() bool {
 
 func (l MainLoop) GetContext() *MainContext {
 	k := new(MainContext)
-	k.Set(Pointer(C.g_main_loop_get_context(l.GMainLoop())))
+	k.SetPtr(Pointer(C.g_main_loop_get_context(l.GMainLoop())))
 	return k
 }
 
@@ -37,6 +37,6 @@ func NewMainLoop(ctx *MainContext) *MainLoop {
 	if ctx != nil {
 		c = ctx.GMainContext()
 	}
-	l.Set(Pointer(C.g_main_loop_new(c, 0)))
+	l.SetPtr(Pointer(C.g_main_loop_new(c, 0)))
 	return l
 }

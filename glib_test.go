@@ -46,14 +46,15 @@ func TestSignal(t *testing.T) {
 
 	a := A("test_signal")
 
-	o.ConnectById(s, (*A).handler, &a)
-	o.ConnectNoInstById(s, (*A).noi_h, &a)
-	o.ConnectById(s, fh, nil)
+	o.ConnectSid(s, (*A).handler, &a)
+	o.ConnectSidNoi(s, (*A).noi_h, &a)
+	o.ConnectSid(s, fh, nil)
 
 	o.EmitById(s, 123)
 }
 
-/*func TestSignalName(t *testing.T) {
+
+func TestSignalName(t *testing.T) {
 	o := NewObject(TYPE_OBJECT, nil)
 
 	NewSignal("sig2", TYPE_NONE, TYPE_OBJECT, TYPE_GO_INT)
@@ -61,9 +62,8 @@ func TestSignal(t *testing.T) {
 	a := A("test_signal_name")
 
 	o.Connect("sig2", (*A).handler, &a)
+	o.ConnectNoi("sig2", (*A).noi_h, &a)
 	o.Connect("sig2", fh, nil)
 
 	o.Emit("sig2", 456)
-}*/
-
-
+}

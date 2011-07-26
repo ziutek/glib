@@ -10,7 +10,7 @@ type MainContext struct {
 }
 
 func (k MainContext) GMainContext() *C.GMainContext {
-	return (*C.GMainContext)(k.Pointer())
+	return (*C.GMainContext)(k.GetPtr())
 }
 
 func (k MainContext) Iteration(may_block bool) bool {
@@ -23,12 +23,12 @@ func (k MainContext) Pending() bool {
 
 func NewMainContext() *MainContext {
 	k := new(MainContext)
-	k.Set(Pointer(C.g_main_context_new()))
+	k.SetPtr(Pointer(C.g_main_context_new()))
 	return k
 }
 
 func DefaultMainContext() *MainContext {
 	k := new(MainContext)
-	k.Set(Pointer(C.g_main_context_default()))
+	k.SetPtr(Pointer(C.g_main_context_default()))
 	return k
 }

@@ -2,6 +2,7 @@ package glib
 
 /*
 #include <stdlib.h>
+#include <pthread.h>
 #include <glib-object.h>
 
 static inline
@@ -22,15 +23,52 @@ typedef struct {
 	const GValue *params;
 	gpointer ih;
 	gpointer mr_data;
+
+	pthread_mutex_t mtx;
 } MarshalParams;
 
-extern void _object_marshal(gpointer mp);  
+MarshalParams *_mp = NULL;
+pthread_mutex_t _mp_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t _mp_cond = PTHREAD_COND_INITIALIZER;
+
+void mp_pass(MarshalParams *mp) {
+	// Prelock params mutex.
+	pthread_mutex_lock(&mp->mtx);
+	// Set global params variable
+	pthread_mutex_lock(&_mp_mutex);
+	_mp = mp;
+	// Signal that _mp is ready
+	pthread_cond_broadcast(&_mp_cond);
+	pthread_mutex_unlock(&_mp_mutex);
+
+	// Wait for processing
+	pthread_mutex_lock(&mp->mtx);
+	pthread_mutex_destroy(&mp->mtx);
+}
+
+MarshalParams* mp_wait() {
+	pthread_mutex_lock(&_mp_mutex);
+	while (_mp == NULL) pthread_cond_wait(&_mp_cond, &_mp_mutex);
+	// Get params from global variable.
+	MarshalParams *mp = _mp;
+	// Reset global variable.
+	_mp = NULL;
+	pthread_mutex_unlock(&_mp_mutex);
+	return mp;
+}
+
+void mp_processed(MarshalParams* mp) {
+	pthread_mutex_unlock(&mp->mtx);
+}
 
 static inline
 void _object_closure_marshal(GClosure* cl, GValue* ret_val, guint n_param,
 		const GValue* params, gpointer ih, gpointer mr_data) {
-	MarshalParams mp = {(GoClosure*) cl, ret_val, n_param, params, ih, mr_data};
-	_object_marshal(&mp);	
+	MarshalParams mp = {
+		(GoClosure*) cl, ret_val, n_param, params, ih, mr_data,
+		PTHREAD_MUTEX_INITIALIZER
+	};
+	mp_pass(&mp);
 }
 
 static inline
@@ -71,8 +109,8 @@ import (
 	"fmt"
 )
 
-type ObjectGetter interface {
-	Object() *Object
+type ObjectCaster interface {
+	AsObject() *Object
 }
 
 type Object struct {
@@ -83,11 +121,11 @@ func (o *Object) g() *C.GObject {
 	return (*C.GObject)(o.p)
 }
 
-func (o *Object) Pointer() Pointer {
+func (o *Object) GetPtr() Pointer {
 	return Pointer(o.p)
 }
 
-func (o *Object) Set(p Pointer) {
+func (o *Object) SetPtr(p Pointer) {
 	o.p = C.gpointer(p)
 }
 
@@ -105,10 +143,9 @@ func (o *Object) Value() *Value {
 	return v
 }
 
-// Returns C pointer
 func (o *Object) Ref() *Object {
 	r := new(Object)
-	r.Set(Pointer(C.g_object_ref(o.p)))
+	r.SetPtr(Pointer(C.g_object_ref(o.p)))
 	return r
 }
 
@@ -116,10 +153,9 @@ func (o *Object) Unref() {
 	C.g_object_unref(C.gpointer(o.p))
 }
 
-// Returns C pointer
 func (o *Object) RefSink() *Object {
 	r := new(Object)
-	r.Set(Pointer(C.g_object_ref_sink(o.p)))
+	r.SetPtr(Pointer(C.g_object_ref_sink(o.p)))
 	return r
 }
 
@@ -155,7 +191,6 @@ func (o *Object) EmitById(sig SignalId, args ...interface{}) interface{} {
 	}
 	ret := new(Value)
 	C._signal_emit(prms[0].g(), C.guint(sig), ret.g())
-	fmt.Println("*** emit ***")
 	return ret.Get()
 }
 
@@ -202,10 +237,8 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 	if ft.NumOut() != 0 && !Type(sq.return_type).Match(ft.Out(0)) {
 		panic("Type of function return value doesn't match signal spec.")
 	}
-	fmt.Println(sq.param_types)
 	if n_params > 0 {
 		pt := (*[1<<16]Type)(unsafe.Pointer(sq.param_types))[:int(sq.n_params)]
-		fmt.Println("(((onnect")
 		for i := 0; i < n_params; i++ {
 			if !pt[i].Match(ft.In(i + poffset)) {
 				panic(fmt.Sprintf(
@@ -264,6 +297,24 @@ func (o *Object) ConnectNoi(sig_name string, cb_func, param0 interface{}) {
 	o.ConnectSidNoi(SignalLookup(sig_name, o.Type()), cb_func, param0)
 }
 
+type Params map[string]interface{}
+
+func NewObject(t Type, params Params) *Object {
+	if params == nil || len(params) == 0 {
+		return &Object{C.g_object_newv(t.g(), 0, nil)}
+	}
+	p := make([]C.GParameter, len(params))
+	i := 0
+	for k, v := range params {
+		s := C.CString(k)
+		defer C.free(unsafe.Pointer(s))
+		p[i].name = (*C.gchar)(s)
+		p[i].value = *ValueOf(v).g()
+		i++
+	}
+	return &Object{C.g_object_newv(t.g(), C.guint(i), &p[0])}
+}
+
 var (
 	ptr_t        = reflect.TypeOf(Pointer(nil))
 	ptr_setter_i = reflect.TypeOf((*PointerSetter)(nil)).Elem()
@@ -287,7 +338,7 @@ func convertVal(t reflect.Type, v reflect.Value) reflect.Value {
 			} else {
 				ret = reflect.Zero(t)
 			}
-			ret.Interface().(PointerSetter).Set(v.Interface().(Pointer))
+			ret.Interface().(PointerSetter).SetPtr(v.Interface().(Pointer))
 		} else if t != ptr_t && t.Kind() == reflect.Ptr {
 			// Input param type is not Pointer but it is some other pointer
 			// so we bypass type checking and converting v to desired type.
@@ -298,22 +349,18 @@ func convertVal(t reflect.Type, v reflect.Value) reflect.Value {
 	return v
 }
 
-//export _object_marshal
-func objectMarshal(mp unsafe.Pointer) {
-	fmt.Println("*** marshal ***")
-	cmp := (*C.MarshalParams)(mp)
-	gc := (*C.GoClosure)(cmp.cl)
-	n_param := int(cmp.n_param)
+func objectMarshal(mp *C.MarshalParams) {
+	gc := (*C.GoClosure)(mp.cl)
+	n_param := int(mp.n_param)
 	first_param := 0
 	if gc.no_inst != 0 {
 		// Callback without instance on which signal was emited as first param 
 		first_param++
 	}
-	prms := (*[1 << 16]Value)(unsafe.Pointer(cmp.params))[:n_param]
+	prms := (*[1 << 16]Value)(unsafe.Pointer(mp.params))[:n_param]
 	h := obj_handlers[uintptr(prms[0].GetPointer())][SigHandlerId(gc.h_id)]
 	prms = prms[first_param:]
 	n_param = len(prms)
-	fmt.Println("*** Doszedl ***")
 
 	if h.p0.Kind() != reflect.Invalid {
 		n_param++
@@ -332,33 +379,23 @@ func objectMarshal(mp unsafe.Pointer) {
 		rps[i] = convertVal(cbt.In(i), v)
 		i++
 	}
-	fmt.Println("rps:", rps)
-	fmt.Println("************* Call BEGIN ***************")
 	ret := h.cb.Call(rps)
-	fmt.Println("*************  Call END  ***************")
-	fmt.Println("Return", unsafe.Pointer(cmp.ret_val))
 	if cbt.NumOut() == 1 {
-		ret_val := (*Value)(cmp.ret_val)
-		fmt.Println("ret:", ret[0])
+		ret_val := (*Value)(mp.ret_val)
 		ret_val.Set(ret[0].Interface())
+	}
+
+	// Signal that params were processed
+	C.mp_processed(mp)
+}
+
+func callbackLoop() {
+	for {
+		mp := C.mp_wait()
+		go objectMarshal(mp)
 	}
 }
 
-type Params map[string]interface{}
-
-// Returns C pointer
-func NewObject(t Type, params Params) *Object {
-	if params == nil || len(params) == 0 {
-		return &Object{C.g_object_newv(t.g(), 0, nil)}
-	}
-	p := make([]C.GParameter, len(params))
-	i := 0
-	for k, v := range params {
-		s := C.CString(k)
-		defer C.free(unsafe.Pointer(s))
-		p[i].name = (*C.gchar)(s)
-		p[i].value = *ValueOf(v).g()
-		i++
-	}
-	return &Object{C.g_object_newv(t.g(), C.guint(i), &p[0])}
+func init() {
+	go callbackLoop()
 }

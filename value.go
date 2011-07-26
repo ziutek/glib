@@ -93,7 +93,7 @@ func (v *Value) Set(i interface{}) {
 		C.g_value_set_static_string(v.g(), (*C.gchar)(C.CString(r.String())))
 
 	default:
-		panic("&Value.Set Can't represent Go value in Glib type system.")
+		panic("Can't represent Go value in Glib type system.")
 	}
 }
 
