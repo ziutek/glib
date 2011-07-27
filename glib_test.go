@@ -27,25 +27,45 @@ func TestValue(t *testing.T) {
 
 // Signals by ID
 func TestSignal(t *testing.T) {
-	// Object on which signal will be emitted
+	// An object on which the signal will be emitted
 	o := NewObject(TYPE_OBJECT, nil)
 
-	// New signal without return value, which can be emitted on TYPE_OBJECT
+	// The new signal without return value, which can be emitted on TYPE_OBJECT
 	// and accepts one parameter of type TYPE_GO_INT
 	s := NewSignal("sig1", TYPE_NONE, o.Type(), TYPE_GO_INT)
 	t.Logf("Signal: %s", s)
 
-	// Object that have methods which will be used as signal handlers
-	a := A("test_signal")
+	// The Go variable of type A that have some methods. These methods will be
+	// used as signal handlers.
+	a := A("Test with IDs")
 
-	// Connect to a.handler method. o will be passed as first argument.
+	// Connect a.handler(*Object, int) to the signal.
+	// o will be passed as its first argument. Second argument of type int will
+	// be passed from second argument passed to Emit function.
 	o.ConnectSid(s, (*A).handler, &a)
-	// Connect to a.noi_hr method. o wiln not be passed to method.
-	o.ConnectSidNoi(s, (*A).noi_h, &a)
-	// Connect to fh function. o will be passed as first argument.
-	o.ConnectSid(s, fh, nil)
 
-	// Emit signal with 123 as its TYPE_GO_INT argument
+	// Connect a.noiHandler(int) to the signal.
+	// o will not be passed to the method. An argument of type int will be
+	// passed from second argument passed to Emit function.
+	o.ConnectSidNoi(s, (*A).noiHandler, &a)
+
+	// Connect funcHandler(*Object, int)to the signal.
+	// o will be passed as its first argument. Second argument of type int
+	// will be passed from second argument passed to Emit function.
+	o.ConnectSid(s, funcHandler, nil)
+
+	// Connect funcNoiHandler(int) to the signal.
+	// o will not be passed to the function. An argument of type int will be
+	// passed from second argument passed to the Emit function.
+	o.ConnectSidNoi(s, funcNoiHandler, nil)
+
+	// Connect funcHandlerParam0(A, *Object, int) to the signal.
+	// &a will be passed as its first argument, o will be passed as its second
+	// argument. The thrid argument of type int will be from second argument
+	// passed to the Emit function.
+	o.ConnectSid(s, funcHandlerParam0, &a)
+
+	// Emit signal with 123 integer as argument.
 	o.EmitById(s, 123)
 }
 
@@ -55,11 +75,13 @@ func TestSignalName(t *testing.T) {
 
 	NewSignal("sig2", TYPE_NONE, TYPE_OBJECT, TYPE_GO_INT)
 
-	a := A("test_signal_name")
+	a := A("Test with names")
 
 	o.Connect("sig2", (*A).handler, &a)
-	o.ConnectNoi("sig2", (*A).noi_h, &a)
-	o.Connect("sig2", fh, nil)
+	o.ConnectNoi("sig2", (*A).noiHandler, &a)
+	o.Connect("sig2", funcHandler, nil)
+	o.ConnectNoi("sig2", funcNoiHandler, nil)
+	o.Connect("sig2", funcHandlerParam0, &a)
 
 	o.Emit("sig2", 456)
 }
@@ -70,11 +92,18 @@ func (a *A) handler(o *Object, i int) {
 	fmt.Printf("handler: %s, %v, %d\n", a, o, i)
 }
 
-func (a *A) noi_h(i int) {
-	fmt.Printf("noi_h: %s, %d\n", a, i)
+func (a *A) noiHandler(i int) {
+	fmt.Printf("noiHandler: %s, %d\n", a, i)
 }
 
-func fh(o *Object, i int) {
-	fmt.Printf("fh: %v, %d\n", o, i)
+func funcHandler(o *Object, i int) {
+	fmt.Printf("funcHandler: %v, %d\n", o, i)
 }
 
+func funcNoiHandler(i int) {
+	fmt.Printf("funcNoiHandler: %d\n", i)
+}
+
+func funcHandlerParam0(a *A, o *Object, i int) {
+	fmt.Printf("funcHandlerParam0: %s %v %d\n", a, o, i)
+}
