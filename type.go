@@ -79,7 +79,7 @@ func (t Type) Type() Type {
 }
 
 func (t Type) Value() *Value {
-	v := DefaultValue(t.Type())
+	v := NewValue(t.Type())
 	C.g_value_set_gtype(v.g(), t.g())
 	return v
 }

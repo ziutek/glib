@@ -138,7 +138,7 @@ func (o *Object) AsObject() *Object {
 }
 
 func (o *Object) Value() *Value {
-	v := DefaultValue(o.Type())
+	v := NewValue(o.Type())
 	C.g_value_set_object(v.g(), o.p)
 	return v
 }

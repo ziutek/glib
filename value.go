@@ -108,7 +108,7 @@ func (v *Value) Unset() {
 }
 
 // Returns new initializes value
-func DefaultValue(t Type) (v *Value) {
+func NewValue(t Type) (v *Value) {
 	v = new(Value)
 	v.Init(t)
 	return
@@ -120,7 +120,7 @@ func ValueOf(i interface{}) *Value {
 	if v, ok := i.(*Value); ok {
 		return v
 	}
-	v := DefaultValue(TypeOf(i))
+	v := NewValue(TypeOf(i))
 	v.Set(i)
 	return v
 }
