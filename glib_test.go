@@ -41,17 +41,17 @@ func TestSignal(t *testing.T) {
 
 	// Connect a.handler(*Object, int) to the signal.
 	// o will be passed as its first argument. Second argument of type int will
-	// be passed from second argument passed to Emit function.
+	// be passed from second argument passed to the Emit function.
 	o.ConnectSid(s, (*A).handler, &a)
 
 	// Connect a.noiHandler(int) to the signal.
 	// o will not be passed to the method. An argument of type int will be
-	// passed from second argument passed to Emit function.
+	// passed from second argument passed to the Emit function.
 	o.ConnectSidNoi(s, (*A).noiHandler, &a)
 
 	// Connect funcHandler(*Object, int)to the signal.
 	// o will be passed as its first argument. Second argument of type int
-	// will be passed from second argument passed to Emit function.
+	// will be passed from second argument passed to the Emit function.
 	o.ConnectSid(s, funcHandler, nil)
 
 	// Connect funcNoiHandler(int) to the signal.
