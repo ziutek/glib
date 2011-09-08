@@ -194,13 +194,16 @@ func (v *Value) Get() interface{} {
 	case TYPE_GTYPE:
 		return Type(C.g_value_get_gtype(v.g()))
 	}
-	/*if t.IsA(TYPE_OBJECT) {
+	if t.IsA(TYPE_OBJECT) {
 		o := new(Object)
-		o.Set(Pointer(C.g_value_get_object(v.g())))
+		o.SetPtr(Pointer(C.g_value_get_object(v.g())))
 		return o
-	}*/
-	// Value of unknown type is returned as Pointer
-	return Pointer(C.g_value_peek_pointer(v.g()))
+	}
+	if C.g_value_fits_pointer(v.g()) != 0 {
+		return Pointer(C.g_value_peek_pointer(v.g()))
+	}
+	// Value of unknown type is returned as is
+	return v
 }
 
 func (v *Value) GetString() string {

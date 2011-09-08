@@ -15,6 +15,7 @@ import "C"
 import (
 	"strconv"
 	"reflect"
+	"unsafe"
 )
 
 type TypeGetter interface {
@@ -218,6 +219,12 @@ func TypeOf(i interface{}) Type {
 	panic("Can't map Go type to Glib type")
 }
 
+func TypeFromName(name string) Type {
+	tn := C.CString(name)
+	defer C.free(unsafe.Pointer(tn))
+	return Type(C.g_type_from_name((*C.gchar)(tn)))
+}
+
 func init() {
 	C.g_thread_init(nil)
 	C.g_type_init()
@@ -268,4 +275,18 @@ func (q Quark) String() string {
 
 func QuarkFromString(s string) Quark {
 	return Quark(C.g_quark_from_static_string((*C.gchar)(C.CString(s))))
+}
+
+type Error C.GError
+
+func (e *Error) String() string {
+	return C.GoString((*C.char)(e.message))
+}
+
+func (e *Error) GetDomain() Quark {
+	return Quark(e.domain)
+}
+
+func (e *Error) GetCode() int {
+	return int(e.code)
 }

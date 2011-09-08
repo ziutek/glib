@@ -230,7 +230,7 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 	n_params := int(sq.n_params)
 	if ft.NumIn() != n_params+poffset {
 		panic(fmt.Sprintf(
-			"Number of callback function parameters #%d isn't equal to #%d",
+			"Number of function parameters #%d isn't equal to signal spec: #%d",
 			ft.NumIn(), n_params+poffset,
 		))
 	}
@@ -243,7 +243,7 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 			if !pt[i].Match(ft.In(i + poffset)) {
 				panic(fmt.Sprintf(
 					"Callback #%d param. type %s doesn't match signal spec %s",
-					i+1, ft.In(i), pt[i],
+					i+1, ft.In(i + poffset), pt[i],
 				))
 			}
 		}
@@ -317,6 +317,7 @@ func NewObject(t Type, params Params) *Object {
 
 var (
 	ptr_t        = reflect.TypeOf(Pointer(nil))
+	obj_t        = reflect.TypeOf(&Object{})
 	ptr_setter_i = reflect.TypeOf((*PointerSetter)(nil)).Elem()
 )
 
@@ -327,22 +328,27 @@ func valueFromPointer(p Pointer, t reflect.Type) reflect.Value {
 }
 
 func convertVal(t reflect.Type, v reflect.Value) reflect.Value {
-	if v.Type() == ptr_t {
-		// v type is Pointer
+	var ptr Pointer
+	if v.Type() == obj_t {
+		ptr = v.Interface().(*Object).GetPtr()
+	} else if v.Type() == ptr_t {
+		ptr = v.Interface().(Pointer)
+	}
+	if ptr != nil {
 		var ret reflect.Value
 		if t.Implements(ptr_setter_i) {
 			// Desired type implements PointerSetter so we are creating
-			// new value with desired type and set it from v
+			// new value with desired type and set it from ptr
 			if t.Kind() == reflect.Ptr {
 				ret = reflect.New(t.Elem())
 			} else {
 				ret = reflect.Zero(t)
 			}
-			ret.Interface().(PointerSetter).SetPtr(v.Interface().(Pointer))
-		} else if t != ptr_t && t.Kind() == reflect.Ptr {
-			// Input param type is not Pointer but it is some other pointer
-			// so we bypass type checking and converting v to desired type.
-			ret = valueFromPointer(v.Interface().(Pointer), t)
+			ret.Interface().(PointerSetter).SetPtr(ptr)
+		} else if t.Kind() == reflect.Ptr {
+			// t doesn't implements PointerSetter but it is pointer
+			// so we bypass type checking and setting it from ptr.
+			ret = valueFromPointer(ptr, t)
 		}
 		return ret
 	}
@@ -358,7 +364,16 @@ func objectMarshal(mp *C.MarshalParams) {
 		first_param++
 	}
 	prms := (*[1 << 16]Value)(unsafe.Pointer(mp.params))[:n_param]
-	h := obj_handlers[uintptr(prms[0].GetPointer())][SigHandlerId(gc.h_id)]
+	var ptr uintptr
+	switch p := prms[0].Get().(type) {
+	case Pointer:
+		ptr = uintptr(p)
+	case *Object:
+		ptr = uintptr(p.GetPtr())
+	default:
+		panic(fmt.Sprintf("Unknown type of #1 parameter: %s", prms[0].Type()))
+	}
+	h := obj_handlers[ptr][SigHandlerId(gc.h_id)]
 	prms = prms[first_param:]
 	n_param = len(prms)
 
