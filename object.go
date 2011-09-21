@@ -204,7 +204,7 @@ type sigHandler struct {
 var obj_handlers = make(map[uintptr]map[SigHandlerId]*sigHandler)
 
 func (o *Object) connect(noi bool, sid SignalId, detail Quark, cb_func,
-param0 interface{}) {
+	param0 interface{}) {
 	cb := reflect.ValueOf(cb_func)
 	if cb.Kind() != reflect.Func {
 		panic("cb_func isn't a function")
@@ -225,6 +225,11 @@ param0 interface{}) {
 	if noi {
 		// There is no instance on which signal was emited as first parameter
 		poffset--
+	} else if !o.Type().Match(ft.In(poffset - 1)) {
+		panic(fmt.Sprintf(
+			"Callback #%d param. type %s doesn't match signal source: %s",
+			poffset-1, ft.In(poffset-1), o.Type(),
+		))
 	}
 	n_params := int(sq.n_params)
 	if ft.NumIn() != n_params+poffset {
@@ -242,7 +247,7 @@ param0 interface{}) {
 			if !pt[i].Match(ft.In(i + poffset)) {
 				panic(fmt.Sprintf(
 					"Callback #%d param. type %s doesn't match signal spec %s",
-					i+1, ft.In(i+poffset), pt[i],
+					i+poffset, ft.In(i+poffset), pt[i],
 				))
 			}
 		}
@@ -276,14 +281,14 @@ param0 interface{}) {
 
 // Connect callback to signal specified by id
 func (o *Object) ConnectSid(sid SignalId, detail Quark,
-cb_func, param0 interface{}) {
+	cb_func, param0 interface{}) {
 	o.connect(false, sid, detail, cb_func, param0)
 }
 
 // Connect callback to signal specified by id.
 // Doesn't pass o as first parameter to callback.
 func (o *Object) ConnectSidNoi(sid SignalId, detail Quark,
-cb_func, param0 interface{}) {
+	cb_func, param0 interface{}) {
 	o.connect(true, sid, detail, cb_func, param0)
 }
 
