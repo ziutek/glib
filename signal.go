@@ -8,6 +8,7 @@ import "C"
 
 import (
 	"unsafe"
+	"strings"
 )
 
 type SignalFlags C.GSignalFlags
@@ -49,8 +50,13 @@ func (s SignalId) String() string {
 	return C.GoString((*C.char)(C.g_signal_name(C.guint(s))))
 }
 
-func SignalLookup(n string, t Type) SignalId {
-	s := C.CString(n)
+func SignalLookup(name string, t Type) (sid SignalId, detail Quark) {
+	st := strings.SplitN(name, "::", 2)
+	if len(st) == 2 {
+		detail = QuarkFromString(st[1])
+	}
+	s := C.CString(st[0])
+	sid = SignalId(C.g_signal_lookup((*C.gchar)(s), t.g()))
 	defer C.free(unsafe.Pointer(s))
-	return SignalId(C.g_signal_lookup((*C.gchar)(s), t.g()))
+	return
 }

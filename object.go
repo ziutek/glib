@@ -81,24 +81,20 @@ GoClosure* _object_closure_new(gboolean no_inst, gpointer p0) {
 }
 
 static inline
-gulong _signal_connect(GObject* inst, guint sig, GoClosure* cl) {
+gulong _signal_connect(GObject* inst, guint id, GQuark detail, GoClosure* cl) {
 	return g_signal_connect_closure_by_id(
 		inst,
-		sig,
-		0,
+		id,
+		detail,
 		(GClosure*) cl,
 		TRUE
 	);
 }
 
 static inline
-void _signal_emit(const GValue *inst_and_params, guint sig, GValue *ret) {
-	return g_signal_emitv(
-		inst_and_params,
-		sig,
-		0,
-		ret
-	);
+void _signal_emit(const GValue *inst_and_params, guint id, GQuark detail,
+		GValue *ret) {
+	return g_signal_emitv( inst_and_params, id, detail, ret);
 }
 */
 import "C"
@@ -174,9 +170,9 @@ func (o *Object) GetProperty(name string) interface{} {
 	return v.Get()
 }
 
-func (o *Object) EmitById(sig SignalId, args ...interface{}) interface{} {
+func (o *Object) EmitById(sid SignalId, detail Quark, args ...interface{}) interface{} {
 	var sq C.GSignalQuery
-	C.g_signal_query(C.guint(sig), &sq)
+	C.g_signal_query(C.guint(sid), &sq)
 	if len(args) != int(sq.n_params) {
 		panic(fmt.Sprintf(
 			"*Object.EmitById "+
@@ -190,12 +186,13 @@ func (o *Object) EmitById(sig SignalId, args ...interface{}) interface{} {
 		prms[i+1] = *ValueOf(a)
 	}
 	ret := new(Value)
-	C._signal_emit(prms[0].g(), C.guint(sig), ret.g())
+	C._signal_emit(prms[0].g(), C.guint(sid), C.GQuark(detail), ret.g())
 	return ret.Get()
 }
 
 func (o *Object) Emit(sig_name string, args ...interface{}) interface{} {
-	return o.EmitById(SignalLookup(sig_name, o.Type()), args...)
+	sid, detail := SignalLookup(sig_name, o.Type())
+	return o.EmitById(sid, detail, args...)
 }
 
 type SigHandlerId C.gulong
@@ -206,16 +203,18 @@ type sigHandler struct {
 
 var obj_handlers = make(map[uintptr]map[SigHandlerId]*sigHandler)
 
-func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
+func (o *Object) connect(noi bool, sid SignalId, detail Quark, cb_func,
+param0 interface{}) {
 	cb := reflect.ValueOf(cb_func)
 	if cb.Kind() != reflect.Func {
 		panic("cb_func isn't a function")
 	}
 	// Check that function parameters and return value match to signal
 	var sq C.GSignalQuery
-	C.g_signal_query(C.guint(sig), &sq)
+
+	C.g_signal_query(C.guint(sid), &sq)
 	ft := cb.Type()
-	if ft.NumOut() > 1 || ft.NumOut() == 1 && Type(sq.return_type)== TYPE_NONE {
+	if ft.NumOut() > 1 || ft.NumOut() == 1 && Type(sq.return_type) == TYPE_NONE {
 		panic("Number of function return values doesn't match signal spec.")
 	}
 	poffset := 2
@@ -238,12 +237,12 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 		panic("Type of function return value doesn't match signal spec.")
 	}
 	if n_params > 0 {
-		pt := (*[1<<16]Type)(unsafe.Pointer(sq.param_types))[:int(sq.n_params)]
+		pt := (*[1 << 16]Type)(unsafe.Pointer(sq.param_types))[:int(sq.n_params)]
 		for i := 0; i < n_params; i++ {
 			if !pt[i].Match(ft.In(i + poffset)) {
 				panic(fmt.Sprintf(
 					"Callback #%d param. type %s doesn't match signal spec %s",
-					i+1, ft.In(i + poffset), pt[i],
+					i+1, ft.In(i+poffset), pt[i],
 				))
 			}
 		}
@@ -266,7 +265,7 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 	default:
 		panic("Callback parameter #0 isn't a pointer nor nil")
 	}
-	gocl.h_id = C._signal_connect(o.g(), C.guint(sig), gocl)
+	gocl.h_id = C._signal_connect(o.g(), C.guint(sid), C.GQuark(detail), gocl)
 	oh := obj_handlers[uintptr(o.p)]
 	if oh == nil {
 		oh = make(map[SigHandlerId]*sigHandler)
@@ -276,25 +275,29 @@ func (o *Object) connect(noi bool, sig SignalId, cb_func, param0 interface{}) {
 }
 
 // Connect callback to signal specified by id
-func (o *Object) ConnectSid(sig SignalId, cb_func, param0 interface{}) {
-	o.connect(false, sig, cb_func, param0)
+func (o *Object) ConnectSid(sid SignalId, detail Quark,
+cb_func, param0 interface{}) {
+	o.connect(false, sid, detail, cb_func, param0)
 }
 
 // Connect callback to signal specified by id.
 // Doesn't pass o as first parameter to callback.
-func (o *Object) ConnectSidNoi(sig SignalId, cb_func, param0 interface{}) {
-	o.connect(true, sig, cb_func, param0)
+func (o *Object) ConnectSidNoi(sid SignalId, detail Quark,
+cb_func, param0 interface{}) {
+	o.connect(true, sid, detail, cb_func, param0)
 }
 
 // Connect callback to signal specified by name.
 func (o *Object) Connect(sig_name string, cb_func, param0 interface{}) {
-	o.ConnectSid(SignalLookup(sig_name, o.Type()), cb_func, param0)
+	sid, detail := SignalLookup(sig_name, o.Type())
+	o.connect(false, sid, detail, cb_func, param0)
 }
 
 // Connect callback to signal specified by name.
 // Doesn't pass o as first parameter to callback.
 func (o *Object) ConnectNoi(sig_name string, cb_func, param0 interface{}) {
-	o.ConnectSidNoi(SignalLookup(sig_name, o.Type()), cb_func, param0)
+	sid, detail := SignalLookup(sig_name, o.Type())
+	o.connect(true, sid, detail, cb_func, param0)
 }
 
 type Params map[string]interface{}

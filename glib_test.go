@@ -42,31 +42,31 @@ func TestSignal(t *testing.T) {
 	// Connect a.handler(*Object, int) to the signal.
 	// o will be passed as its first argument. Second argument of type int will
 	// be passed from second argument passed to the Emit function.
-	o.ConnectSid(s, (*A).handler, &a)
+	o.ConnectSid(s, 0, (*A).handler, &a)
 
 	// Connect a.noiHandler(int) to the signal.
 	// o will not be passed to the method. An argument of type int will be
 	// passed from second argument passed to the Emit function.
-	o.ConnectSidNoi(s, (*A).noiHandler, &a)
+	o.ConnectSidNoi(s, 0, (*A).noiHandler, &a)
 
 	// Connect funcHandler(*Object, int)to the signal.
 	// o will be passed as its first argument. Second argument of type int
 	// will be passed from second argument passed to the Emit function.
-	o.ConnectSid(s, funcHandler, nil)
+	o.ConnectSid(s, 0, funcHandler, nil)
 
 	// Connect funcNoiHandler(int) to the signal.
 	// o will not be passed to the function. An argument of type int will be
 	// passed from second argument passed to the Emit function.
-	o.ConnectSidNoi(s, funcNoiHandler, nil)
+	o.ConnectSidNoi(s, 0, funcNoiHandler, nil)
 
 	// Connect funcHandlerParam0(A, *Object, int) to the signal.
 	// &a will be passed as its first argument, o will be passed as its second
 	// argument. The thrid argument of type int will be from second argument
 	// passed to the Emit function.
-	o.ConnectSid(s, funcHandlerParam0, &a)
+	o.ConnectSid(s, 0, funcHandlerParam0, &a)
 
 	// Emit signal with 123 integer as argument.
-	o.EmitById(s, 123)
+	o.EmitById(s, 0, 123)
 }
 
 // Like TestSignal but uses signal names
