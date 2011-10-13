@@ -8,3 +8,7 @@ See example [GTK](https://github.com/ziutek/gtk) bindings or
 
 See [glib_test.go](https://github.com/ziutek/glib/blob/master/glib_test.go) for
 signal/event handling model.
+
+#### Documentation
+
+http://gopkgdoc.appspot.com/pkg/github.com/ziutek/glib
