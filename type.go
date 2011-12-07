@@ -230,7 +230,7 @@ func init() {
 	C.g_type_init()
 	TYPE_GTYPE = Type(C.g_gtype_get_type())
 	int_bytes := strconv.IntSize / 8
-	if int_bytes == uint(C._GINT_SIZE) {
+	if int_bytes == int(C._GINT_SIZE) {
 		TYPE_GO_INT = TYPE_INT
 		TYPE_GO_UINT = TYPE_UINT
 	} else if int_bytes == C._GLONG_SIZE {
