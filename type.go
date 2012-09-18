@@ -13,8 +13,8 @@ package glib
 import "C"
 
 import (
-	"strconv"
 	"reflect"
+	"strconv"
 	"unsafe"
 )
 
@@ -61,7 +61,6 @@ var (
 	TYPE_GO_INT32  Type
 	TYPE_GO_UINT32 Type
 )
-
 
 func (t Type) g() C.GType {
 	return C.GType(t)
@@ -226,7 +225,6 @@ func TypeFromName(name string) Type {
 }
 
 func init() {
-	C.g_thread_init(nil)
 	C.g_type_init()
 	TYPE_GTYPE = Type(C.g_gtype_get_type())
 	int_bytes := strconv.IntSize / 8
