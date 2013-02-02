@@ -48,7 +48,7 @@ func (v *Value) Set(i interface{}) {
 		}
 
 	case reflect.Int8:
-		C.g_value_set_char(v.g(), C.gchar(i.(int8)))
+		C.g_value_set_schar(v.g(), C.gint8(i.(int8)))
 
 	case reflect.Int32:
 		if TYPE_GO_INT32 == TYPE_INT {
@@ -154,7 +154,7 @@ func (v *Value) Get() interface{} {
 		}
 
 	case TYPE_CHAR:
-		return int8(C.g_value_get_char(v.g()))
+		return int8(C.g_value_get_schar(v.g()))
 
 	case TYPE_UCHAR:
 		return uint8(C.g_value_get_uchar(v.g()))
