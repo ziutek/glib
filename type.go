@@ -277,7 +277,7 @@ func QuarkFromString(s string) Quark {
 
 type Error C.GError
 
-func (e *Error) String() string {
+func (e *Error) Error() string {
 	return C.GoString((*C.char)(e.message))
 }
 
