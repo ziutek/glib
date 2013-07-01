@@ -8,6 +8,7 @@ package glib
 #define _GINT_SIZE sizeof(gint)
 #define _GLONG_SIZE sizeof(glong)
 
+#cgo CFLAGS: -Wno-deprecated-declarations
 #cgo pkg-config: glib-2.0 gobject-2.0 gthread-2.0
 */
 import "C"
