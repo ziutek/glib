@@ -9,6 +9,11 @@ See example [GTK](https://github.com/ziutek/gtk) bindings or
 See [glib_test.go](https://github.com/ziutek/glib/blob/master/glib_test.go) for
 signal/event handling model.
 
+### Dependencies
+
+You need glib 2.0 library with C headers to install this package
+(libglib2.0-dev on Debian/Ubuntu).
+
 #### Documentation
 
 http://gopkgdoc.appspot.com/pkg/github.com/ziutek/glib
