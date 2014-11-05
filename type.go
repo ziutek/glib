@@ -5,9 +5,6 @@ package glib
 #include <stdlib.h>
 #include <glib-object.h>
 
-#define _GINT_SIZE sizeof(gint)
-#define _GLONG_SIZE sizeof(glong)
-
 #cgo CFLAGS: -Wno-deprecated-declarations
 #cgo pkg-config: glib-2.0 gobject-2.0 gthread-2.0
 */
@@ -15,7 +12,6 @@ import "C"
 
 import (
 	"reflect"
-	"strconv"
 	"unsafe"
 )
 
@@ -38,9 +34,13 @@ const (
 	TYPE_UCHAR     = Type(C.G_TYPE_UCHAR)
 	TYPE_BOOLEAN   = Type(C.G_TYPE_BOOLEAN)
 	TYPE_INT       = Type(C.G_TYPE_INT)
+	TYPE_GO_INT32  = TYPE_INT
 	TYPE_UINT      = Type(C.G_TYPE_UINT)
+	TYPE_GO_UINT32 = TYPE_UINT
 	TYPE_LONG      = Type(C.G_TYPE_LONG)
+	TYPE_GO_INT    = TYPE_LONG
 	TYPE_ULONG     = Type(C.G_TYPE_ULONG)
+	TYPE_GO_UINT   = TYPE_ULONG
 	TYPE_INT64     = Type(C.G_TYPE_INT64)
 	TYPE_UINT64    = Type(C.G_TYPE_UINT64)
 	TYPE_ENUM      = Type(C.G_TYPE_ENUM)
@@ -55,13 +55,7 @@ const (
 	TYPE_VARIANT   = Type(C.G_TYPE_VARIANT)
 )
 
-var (
-	TYPE_GTYPE     Type
-	TYPE_GO_INT    Type
-	TYPE_GO_UINT   Type
-	TYPE_GO_INT32  Type
-	TYPE_GO_UINT32 Type
-)
+var TYPE_GTYPE Type
 
 func (t Type) g() C.GType {
 	return C.GType(t)
@@ -89,8 +83,8 @@ func (t Type) Parent() Type {
 	return Type(C.g_type_parent(t.g()))
 }
 
-func (t Type) Depth() uint {
-	return uint(C.g_type_depth(t.g()))
+func (t Type) Depth() int {
+	return int(C.g_type_depth(t.g()))
 }
 
 // Returns the type that is derived directly from root type which is also
@@ -166,7 +160,15 @@ func (t Type) Match(rt reflect.Type) bool {
 	return false
 }
 
-// Returns the Type of the value in the interface{}.
+func (t Type) Compatible(dst Type) bool {
+	return C.g_value_type_compatible(t.g(), dst.g()) != C.gboolean(0)
+}
+
+func (t Type) Transformable(dst Type) bool {
+	return C.g_value_type_transformable(t.g(), dst.g()) != C.gboolean(0)
+}
+
+// TypeOf returns the Type of the value in the i}.
 func TypeOf(i interface{}) Type {
 	// Types ov values that implements TypeGetter
 	if o, ok := i.(TypeGetter); ok {
@@ -228,29 +230,6 @@ func TypeFromName(name string) Type {
 func init() {
 	C.g_type_init()
 	TYPE_GTYPE = Type(C.g_gtype_get_type())
-	int_bytes := strconv.IntSize / 8
-	if int_bytes == int(C._GINT_SIZE) {
-		TYPE_GO_INT = TYPE_INT
-		TYPE_GO_UINT = TYPE_UINT
-	} else if int_bytes == C._GLONG_SIZE {
-		TYPE_GO_INT = TYPE_LONG
-		TYPE_GO_UINT = TYPE_ULONG
-	} else if int_bytes == 64 {
-		TYPE_GO_INT = TYPE_INT64
-		TYPE_GO_UINT = TYPE_UINT64
-	} else {
-		panic("Unexpectd size of 'int'")
-	}
-	int32_bytes := C.uint(4)
-	if int32_bytes == C._GINT_SIZE {
-		TYPE_GO_INT32 = TYPE_INT
-		TYPE_GO_UINT32 = TYPE_UINT
-	} else if int32_bytes == C._GLONG_SIZE {
-		TYPE_GO_INT32 = TYPE_LONG
-		TYPE_GO_UINT32 = TYPE_ULONG
-	} else {
-		panic("Neither gint nor glong are 32 bit numbers")
-	}
 }
 
 type Pointer C.gpointer

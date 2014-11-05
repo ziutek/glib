@@ -1,8 +1,8 @@
 package glib
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 // GLib values
@@ -16,12 +16,12 @@ func TestValue(t *testing.T) {
 		t.Error("TYPE_UINT64")
 	}
 	v2 := -1
-	a = ValueOf(v2)
-	b = NewValue(TYPE_INT)
-	a.Copy(b)
+	a = ValueOf(v2)             // TYPE_GO_INT == TYPE_LONG
+	b = NewValue(TYPE_GO_INT32) // TYPE_GO_INT32 == TYPE_INT
+	a.Transform(b)
 	t.Logf("a = %s(%s), b = %s(%s)", a.Type(), a, b.Type(), b)
-	if b.Get() != v2 {
-		t.Error("TYPE_INT")
+	if b.Get().(int32) != int32(v2) {
+		t.Error("TYPE_GO_INT32 (TYPE_INT)")
 	}
 }
 
@@ -89,11 +89,11 @@ func TestSignalName(t *testing.T) {
 type A string
 
 func (a *A) handler(o *Object, i int) {
-	fmt.Printf("handler: %s, %v, %d\n", a, o, i)
+	fmt.Printf("handler: %s, %v, %d\n", *a, o, i)
 }
 
 func (a *A) noiHandler(i int) {
-	fmt.Printf("noiHandler: %s, %d\n", a, i)
+	fmt.Printf("noiHandler: %s, %d\n", *a, i)
 }
 
 func funcHandler(o *Object, i int) {
@@ -105,5 +105,5 @@ func funcNoiHandler(i int) {
 }
 
 func funcHandlerParam0(a *A, o *Object, i int) {
-	fmt.Printf("funcHandlerParam0: %s %v %d\n", a, o, i)
+	fmt.Printf("funcHandlerParam0: %s %v %d\n", *a, o, i)
 }

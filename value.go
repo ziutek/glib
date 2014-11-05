@@ -6,8 +6,8 @@ package glib
 import "C"
 
 import (
-	"reflect"
 	"fmt"
+	"reflect"
 )
 
 type ValueGetter interface {
@@ -41,41 +41,25 @@ func (v *Value) Set(i interface{}) {
 		C.g_value_set_boolean(v.g(), gBoolean(r.Bool()))
 
 	case reflect.Int:
-		if TYPE_GO_INT == TYPE_INT {
-			C.g_value_set_int(v.g(), C.gint(i.(int)))
-		} else {
-			C.g_value_set_long(v.g(), C.glong(i.(int)))
-		}
+		C.g_value_set_long(v.g(), C.glong(i.(int)))
 
 	case reflect.Int8:
 		C.g_value_set_schar(v.g(), C.gint8(i.(int8)))
 
 	case reflect.Int32:
-		if TYPE_GO_INT32 == TYPE_INT {
-			C.g_value_set_int(v.g(), C.gint(i.(int32)))
-		} else {
-			C.g_value_set_long(v.g(), C.glong(i.(int32)))
-		}
+		C.g_value_set_int(v.g(), C.gint(i.(int32)))
 
 	case reflect.Int64:
 		C.g_value_set_int64(v.g(), C.gint64(i.(int64)))
 
 	case reflect.Uint:
-		if TYPE_GO_INT == TYPE_INT {
-			C.g_value_set_uint(v.g(), C.guint(i.(uint)))
-		} else {
-			C.g_value_set_ulong(v.g(), C.gulong(i.(uint)))
-		}
+		C.g_value_set_ulong(v.g(), C.gulong(i.(uint)))
 
 	case reflect.Uint8:
 		C.g_value_set_uchar(v.g(), C.guchar(i.(uint8)))
 
 	case reflect.Uint32:
-		if TYPE_GO_INT32 == TYPE_INT {
-			C.g_value_set_uint(v.g(), C.guint(i.(uint32)))
-		} else {
-			C.g_value_set_ulong(v.g(), C.gulong(i.(uint32)))
-		}
+		C.g_value_set_uint(v.g(), C.guint(i.(uint32)))
 
 	case reflect.Uint64:
 		C.g_value_set_uint64(v.g(), C.guint64(i.(uint64)))
@@ -97,7 +81,7 @@ func (v *Value) Set(i interface{}) {
 	}
 }
 
-// Initializes value with the default value of type. 
+// Initializes value with the default value of type.
 func (v *Value) Init(t Type) {
 	C.g_value_init(v.g(), t.g())
 }
@@ -125,9 +109,20 @@ func ValueOf(i interface{}) *Value {
 	return v
 }
 
-// Copies the value into dst.
+// Copy copies the value into dst.
 func (v *Value) Copy(dst *Value) {
+	if !v.Type().Compatible(dst.Type()) {
+		panic(fmt.Sprintf("can't copy %s into %s", v.Type(), dst.Type()))
+	}
 	C.g_value_copy(v.g(), dst.g())
+}
+
+// Transform transforms the value into dst.
+func (v *Value) Transform(dst *Value) {
+	if !v.Type().Transformable(dst.Type()) {
+		panic(fmt.Sprintf("can't transform %s into %s", v.Type(), dst.Type()))
+	}
+	C.g_value_transform(v.g(), dst.g())
 }
 
 func (v *Value) Get() interface{} {
@@ -140,18 +135,10 @@ func (v *Value) Get() interface{} {
 		return C.GoString((*C.char)(C.g_value_get_string(v.g())))
 
 	case TYPE_GO_INT:
-		if TYPE_GO_INT == TYPE_INT {
-			return int(C.g_value_get_int(v.g()))
-		} else {
-			return int(C.g_value_get_long(v.g()))
-		}
+		return int(C.g_value_get_long(v.g()))
 
 	case TYPE_GO_UINT:
-		if TYPE_GO_INT == TYPE_INT {
-			return uint(C.g_value_get_uint(v.g()))
-		} else {
-			return uint(C.g_value_get_ulong(v.g()))
-		}
+		return uint(C.g_value_get_ulong(v.g()))
 
 	case TYPE_CHAR:
 		return int8(C.g_value_get_schar(v.g()))
@@ -160,18 +147,10 @@ func (v *Value) Get() interface{} {
 		return uint8(C.g_value_get_uchar(v.g()))
 
 	case TYPE_GO_INT32:
-		if TYPE_GO_INT32 == TYPE_INT {
-			return int32(C.g_value_get_int(v.g()))
-		} else {
-			return int32(C.g_value_get_long(v.g()))
-		}
+		return int32(C.g_value_get_int(v.g()))
 
 	case TYPE_GO_UINT32:
-		if TYPE_GO_INT32 == TYPE_INT {
-			return uint32(C.g_value_get_uint(v.g()))
-		} else {
-			return uint32(C.g_value_get_ulong(v.g()))
-		}
+		return uint32(C.g_value_get_uint(v.g()))
 
 	case TYPE_INT64:
 		return int64(C.g_value_get_int64(v.g()))
